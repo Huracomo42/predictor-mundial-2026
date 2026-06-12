@@ -260,11 +260,13 @@ function mostrarResultado(datos, esGuardado) {
 
   const actionInfo = document.getElementById('action-info');
   if (esGuardado) {
-    actionInfo.textContent = '✓ Predicción guardada en Firebase';
-    document.getElementById('btn-guardar').textContent = '✓ Ya guardada';
-    document.getElementById('btn-guardar').disabled = true;
+    actionInfo.textContent = '✓ Predicción guardada en Firebase. Puedes actualizarla si generaste nuevo análisis IA.';
+    document.getElementById('btn-guardar').textContent = 'Actualizar predicción';
+    document.getElementById('btn-guardar').disabled = false;
   } else {
     actionInfo.textContent = 'Guardá la predicción antes de que empiece el partido';
+    document.getElementById('btn-guardar').textContent = 'Guardar predicción';
+    document.getElementById('btn-guardar').disabled = false;
   }
 }
 
