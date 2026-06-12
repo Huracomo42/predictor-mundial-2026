@@ -40,6 +40,149 @@ exports.getMatches = onRequest(
     }
   }
 );
+
+exports.getTeamStats = onRequest(
+  {
+    cors: true,
+  },
+  async (req, res) => {
+    try {
+      const equipoId = req.query.equipoId;
+      const equipoNombre = req.query.equipoNombre || "Equipo";
+
+      if (!equipoId) {
+        return res.status(400).json({
+          error: "Falta equipoId",
+        });
+      }
+
+      const urls = [
+        `https://api.football-data.org/v4/teams/${equipoId}/matches?limit=10&competitions=2000`,
+        `https://api.football-data.org/v4/teams/${equipoId}/matches?limit=10`,
+      ];
+
+      const responses = await Promise.all(
+        urls.map((url) =>
+          fetch(url, {
+            headers: {
+              "X-Auth-Token": FOOTBALL_DATA_TOKEN,
+            },
+          })
+        )
+      );
+
+      const data = await Promise.all(
+        responses.map(async (r) => {
+          if (!r.ok) return { matches: [] };
+          return await r.json();
+        })
+      );
+
+      const partidos = data.flatMap((d) => d.matches || []);
+
+      const unicos = [
+        ...new Map(partidos.map((p) => [p.id, p])).values(),
+      ].slice(0, 10);
+
+      const stats = procesarStatsPartidos(unicos, Number(equipoId), equipoNombre);
+
+      return res.status(200).json(stats);
+    } catch (error) {
+      logger.error("Error en getTeamStats", error);
+      return res.status(500).json(getStatsDefault(req.query.equipoNombre || "Equipo"));
+    }
+  }
+);
+
+function procesarStatsPartidos(partidos, equipoId, equipoNombre) {
+  if (!partidos || partidos.length === 0) return getStatsDefault(equipoNombre);
+
+  const terminados = partidos.filter((p) => p.status === "FINISHED");
+  if (terminados.length === 0) return getStatsDefault(equipoNombre);
+
+  let puntos = 0;
+  let golesAFavor = 0;
+  let golesEnContra = 0;
+  let victorias = 0;
+
+  terminados.forEach((p) => {
+    const esLocal = p.homeTeam?.id === equipoId;
+
+    const gF = esLocal
+      ? p.score?.fullTime?.home || 0
+      : p.score?.fullTime?.away || 0;
+
+    const gC = esLocal
+      ? p.score?.fullTime?.away || 0
+      : p.score?.fullTime?.home || 0;
+
+    golesAFavor += gF;
+    golesEnContra += gC;
+
+    if (gF > gC) {
+      puntos += 3;
+      victorias++;
+    } else if (gF === gC) {
+      puntos += 1;
+    }
+  });
+
+  const n = terminados.length;
+  const promGoles = golesAFavor / n;
+  const promConcedidos = golesEnContra / n;
+  const xgEstimado = promGoles * 0.85 + 0.2;
+
+  return {
+    xg_promedio: Math.round(xgEstimado * 100) / 100,
+    forma: calcularForma(terminados, equipoId),
+    puntos_ultimos7: Math.min(21, puntos),
+    goles_promedio: Math.round(promGoles * 100) / 100,
+    goles_concedidos_promedio: Math.round(promConcedidos * 100) / 100,
+    corners_promedio: 4.5,
+    h2h_victorias: Math.round((victorias / n) * 100) / 100,
+    lesiones_impacto: 0,
+    partidos_analizados: n,
+    fuente: "football-data.org via Firebase Function",
+  };
+}
+
+function calcularForma(partidos, equipoId) {
+  const ultimos5 = partidos.slice(-5);
+
+  return ultimos5
+    .map((p) => {
+      const esLocal = p.homeTeam?.id === equipoId;
+
+      const gF = esLocal
+        ? p.score?.fullTime?.home || 0
+        : p.score?.fullTime?.away || 0;
+
+      const gC = esLocal
+        ? p.score?.fullTime?.away || 0
+        : p.score?.fullTime?.home || 0;
+
+      if (gF > gC) return "W";
+      if (gF === gC) return "D";
+      return "L";
+    })
+    .join("");
+}
+
+function getStatsDefault(equipoNombre) {
+  return {
+    xg_promedio: 1.2,
+    forma: "WDWDW",
+    puntos_ultimos7: 10,
+    goles_promedio: 1.3,
+    goles_concedidos_promedio: 1.0,
+    corners_promedio: 4.5,
+    h2h_victorias: 0.4,
+    lesiones_impacto: 0,
+    partidos_analizados: 0,
+    fuente: "estimado",
+  };
+}
+
 exports.analyzePsychology = onRequest(
   {
     cors: true,
