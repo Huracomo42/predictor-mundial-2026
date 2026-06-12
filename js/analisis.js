@@ -1,4 +1,4 @@
-import { getPartidosMundial, getStatsEquipo, analizarPsicologiaClaude, getFlag, formatearFecha } from './api.js';
+import { getPartidosMundial, getStatsEquipo, analizarPsicologiaClaude, getFlag, formatearFecha, getRankingEquipo } from './api.js';
 import { calcularPrediccion } from './modelo.js';
 import { guardarPrediccion, getPrediccion, calcularMetricas } from './firebase-db.js';
 import { ESTADIOS_ALTITUD } from './config.js';
@@ -117,6 +117,13 @@ async function correrAnalisis(partido) {
     setStep('step-psico', 'done');
 
     setStep('step-modelo', 'loading');
+    const nombreLocal = partido.homeTeam?.name;
+    const nombreVisitante = partido.awayTeam?.name;
+
+    const [rankingLocal, rankingVisitante] = await Promise.all([
+      getRankingEquipo(nombreLocal),
+      getRankingEquipo(nombreVisitante)
+    ]);
     const datosPart = {
       jornada,
       estadio: partido.venue || '',

@@ -112,7 +112,7 @@ function calcularScorePsicologico(psico, partido, rol, pesos) {
 
 function calcularBoost(rankingFIFA, jornada) {
   const expectativa = Math.min(1, (rankingFIFA || 24) / 48);
-  const factorBase = 1.0 - expectativa;
+  const factorBase = expectativa;
 
   if (jornada === 1) return 1.0 + (0.10 * factorBase);
   if (jornada === 2) return 1.0 + (0.05 * factorBase);

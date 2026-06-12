@@ -1,0 +1,47 @@
+[
+  {
+    "id": 66456940,
+    "utcDate": "2026-06-12T21:00:00-04:00",
+    "status": "SCHEDULED",
+    "group": "D",
+    "venue": "SoFi Stadium",
+    "homeTeam": {
+      "id": 9001,
+      "name": "United States"
+    },
+    "awayTeam": {
+      "id": 9002,
+      "name": "Paraguay"
+    }
+  },
+  {
+    "id": 66456918,
+    "utcDate": "2026-06-13T15:00:00-04:00",
+    "status": "SCHEDULED",
+    "group": "B",
+    "venue": "BC Place",
+    "homeTeam": {
+      "id": 9003,
+      "name": "Qatar"
+    },
+    "awayTeam": {
+      "id": 9004,
+      "name": "Switzerland"
+    }
+  },
+  {
+    "id": 66456928,
+    "utcDate": "2026-06-13T18:00:00-04:00",
+    "status": "SCHEDULED",
+    "group": "C",
+    "venue": "MetLife Stadium",
+    "homeTeam": {
+      "id": 9005,
+      "name": "Brazil"
+    },
+    "awayTeam": {
+      "id": 9006,
+      "name": "Morocco"
+    }
+  }
+]

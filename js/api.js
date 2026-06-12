@@ -4,13 +4,23 @@ export async function getPartidosMundial() {
   try {
     const res = await fetch("https://us-central1-predictor-mundial-2026-cfbfe.cloudfunctions.net/getMatches");
 
-    if (!res.ok) throw new Error(`Firebase Function getMatches: ${res.status}`);
+    if (!res.ok) {
+      throw new Error(`Firebase Function getMatches: ${res.status}`);
+    }
 
     const data = await res.json();
     return data.matches || [];
   } catch (e) {
-    console.error('Error cargando partidos:', e);
-    return [];
+    console.error('Error cargando partidos desde API. Usando fallback local:', e);
+
+    try {
+      const localRes = await fetch("data/partidos.json");
+      const localData = await localRes.json();
+      return localData || [];
+    } catch (fallbackError) {
+      console.error('Error cargando partidos locales:', fallbackError);
+      return [];
+    }
   }
 }
 
@@ -201,4 +211,15 @@ export function getFlag(nombreEquipo) {
 export function formatearFecha(dateStr) {
   const d = new Date(dateStr);
   return d.toLocaleDateString('es-PE', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+export async function getRankingEquipo(nombreEquipo) {
+  try {
+    const res = await fetch("data/rankings.json");
+    const rankings = await res.json();
+
+    return rankings[nombreEquipo] || 48;
+  } catch (e) {
+    console.error("Error cargando ranking:", e);
+    return 48;
+  }
 }
