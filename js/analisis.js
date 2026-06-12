@@ -1,4 +1,4 @@
-import { getPartidosMundial, getStatsEquipo, analizarPsicologiaClaude, getFlag, formatearFecha, getRankingEquipo } from './api.js';
+import { getPartidosMundial, getStatsEquipo, consultarAnalisisPsicologico, getPsicoDefault, getFlag, formatearFecha, getRankingEquipo } from './api.js';
 import { calcularPrediccion } from './modelo.js';
 import { guardarPrediccion, getPrediccion, calcularMetricas } from './firebase-db.js';
 import { ESTADIOS_ALTITUD } from './config.js';
@@ -83,58 +83,69 @@ window.seleccionarPartido = async function(partidoJson) {
   await correrAnalisis(partido);
 };
 
-async function correrAnalisis(partido) {
+async function correrAnalisis(partido, generarIA = false) {
   document.getElementById('loading-analisis').style.display = 'block';
   document.getElementById('resultado-analisis').style.display = 'none';
 
   const setStep = (stepId, estado) => {
     const el = document.getElementById(stepId);
     if (!el) return;
+
     el.classList.remove('inactive', 'done');
+
     const icon = el.querySelector('.step-icon');
-    if (estado === 'loading') { icon.className = 'step-icon loading'; }
-    else if (estado === 'done') { icon.className = 'step-icon done'; el.classList.add('done'); }
-    else { el.classList.add('inactive'); icon.className = 'step-icon'; }
+
+    if (estado === 'loading') {
+      icon.className = 'step-icon loading';
+    } else if (estado === 'done') {
+      icon.className = 'step-icon done';
+      el.classList.add('done');
+    } else {
+      el.classList.add('inactive');
+      icon.className = 'step-icon';
+    }
   };
 
   try {
     setStep('step-stats', 'loading');
+
     const [statsLocal, statsVisitante] = await Promise.all([
       getStatsEquipo(partido.homeTeam?.id, partido.homeTeam?.name),
       getStatsEquipo(partido.awayTeam?.id, partido.awayTeam?.name),
     ]);
+
     setStep('step-stats', 'done');
 
-    setStep('step-psico', 'loading');
-    const jornada = inferirJornada(partido);
-    const psicologico = await analizarPsicologiaClaude(
-      partido.homeTeam?.name,
-      partido.awayTeam?.name,
-      jornada,
-      partido.group || 'Grupos',
-      new Date(partido.utcDate).toLocaleDateString('es-PE'),
-    );
+    setStep('step-psico', generarIA ? 'loading' : 'done');
+
+    const analisisIA = await consultarAnalisisPsicologico(partido, generarIA);
+    const psicologico = analisisIA.psicologico || getPsicoDefault();
+
     setStep('step-psico', 'done');
 
     setStep('step-modelo', 'loading');
+
+    const jornada = inferirJornada(partido);
     const nombreLocal = partido.homeTeam?.name;
     const nombreVisitante = partido.awayTeam?.name;
 
     const [rankingLocal, rankingVisitante] = await Promise.all([
       getRankingEquipo(nombreLocal),
-      getRankingEquipo(nombreVisitante)
+      getRankingEquipo(nombreVisitante),
     ]);
+
     const datosPart = {
       jornada,
       estadio: partido.venue || '',
       tipoLocalidad: 'local',
-      rankingLocal: 24,
-      rankingVisitante: 32,
-      nombreLocal: partido.homeTeam?.name,
-      nombreVisitante: partido.awayTeam?.name,
+      rankingLocal,
+      rankingVisitante,
+      nombreLocal,
+      nombreVisitante,
     };
 
     const resultado = await calcularPrediccion(datosPart, statsLocal, statsVisitante, psicologico);
+
     setStep('step-modelo', 'done');
 
     resultadoAnalisis = {
@@ -143,17 +154,26 @@ async function correrAnalisis(partido) {
       stats_local: statsLocal,
       stats_visitante: statsVisitante,
       psicologico,
+      analisis_ia_estado: analisisIA.estado || 'pendiente',
+      analisis_ia_cache: analisisIA.cache || false,
+      version_modelo: '1.0',
       scores: resultado,
       apuestas: resultado.apuestas,
     };
 
     document.getElementById('loading-analisis').style.display = 'none';
     mostrarResultado(resultadoAnalisis, false);
+    actualizarEstadoIA(analisisIA, partido);
 
   } catch (e) {
     console.error('Error en análisis:', e);
+
+    const mensaje = e.message.includes("solo puede generarse el día del partido")
+      ? "El análisis IA está bloqueado porque solo puede generarse el día del partido. No se consumió Claude."
+      : `Error al analizar: ${e.message}`;
+
     document.getElementById('loading-analisis').innerHTML =
-      `<div class="empty-state">Error al analizar: ${e.message}</div>`;
+      `<div class="empty-state">${mensaje}</div>`;
   }
 }
 
@@ -297,6 +317,67 @@ async function cargarMetricasNav() {
         Math.round((acertadas / total) * 100) + '%';
     }
   } catch (e) {}
+}
+
+function actualizarEstadoIA(analisisIA, partido) {
+  const titulo = document.getElementById('estado-ia-titulo');
+  const texto = document.getElementById('estado-ia-texto');
+  const btn = document.getElementById('btn-generar-ia');
+
+  if (!titulo || !texto || !btn) return;
+
+  const esHoy = esDiaDelPartidoFrontend(partido.utcDate);
+
+  if (analisisIA.estado === 'completo') {
+    titulo.textContent = 'Análisis psicológico IA generado';
+    texto.textContent = analisisIA.cache
+      ? 'Se está usando el análisis guardado en Firestore. Claude no volvió a ejecutarse.'
+      : 'Análisis generado y guardado en Firestore.';
+    btn.style.display = 'none';
+    return;
+  }
+
+  if (analisisIA.estado === 'generando') {
+    titulo.textContent = 'Análisis IA en proceso';
+    texto.textContent = 'Otro usuario ya está generando este análisis. Vuelve a intentar en unos minutos.';
+    btn.style.display = 'none';
+    return;
+  }
+
+  if (!esHoy) {
+    titulo.textContent = 'Análisis IA bloqueado';
+    texto.textContent = 'El análisis IA solo estará disponible el día del partido. Por ahora se usan valores por defecto.';
+    btn.style.display = 'none';
+    return;
+  }
+
+  titulo.textContent = 'Análisis IA pendiente';
+  texto.textContent = 'Este partido aún no tiene análisis psicológico IA. Puedes generarlo manualmente.';
+  btn.style.display = 'inline-flex';
+  btn.disabled = false;
+  btn.textContent = 'Generar análisis IA';
+}
+
+window.generarAnalisisIA = async function() {
+  if (!partidoActual) return;
+
+  const btn = document.getElementById('btn-generar-ia');
+  btn.disabled = true;
+  btn.textContent = 'Generando IA...';
+
+  await correrAnalisis(partidoActual, true);
+};
+
+function esDiaDelPartidoFrontend(fechaPartido) {
+  const hoyPE = new Date().toLocaleDateString('en-CA', {
+    timeZone: 'America/Lima',
+  });
+
+  const partidoPE = new Date(fechaPartido).toLocaleDateString('en-CA', {
+    timeZone: 'America/Lima',
+  });
+
+  return hoyPE === partidoPE;
 }
 
 init();

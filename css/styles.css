@@ -754,3 +754,21 @@ body {
   .nav-center { display: none; }
   .psico-grid { grid-template-columns: 1fr; }
 }
+
+.ia-control-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid #1e3a6e;
+  border-radius: 12px;
+  background: #0a1628;
+}
+
+.ia-control-box p {
+  margin: 0.25rem 0 0;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
