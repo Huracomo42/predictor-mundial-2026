@@ -277,14 +277,15 @@ Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta, sin text
 function esDiaDelPartido(fechaPartido) {
   if (!fechaPartido) return false;
 
-  const hoy = new Date();
-  const partido = new Date(fechaPartido);
+  const hoyPE = new Date().toLocaleDateString("en-CA", {
+    timeZone: "America/Lima",
+  });
 
-  return (
-    hoy.getFullYear() === partido.getFullYear() &&
-    hoy.getMonth() === partido.getMonth() &&
-    hoy.getDate() === partido.getDate()
-  );
+  const partidoPE = new Date(fechaPartido).toLocaleDateString("en-CA", {
+    timeZone: "America/Lima",
+  });
+
+  return hoyPE === partidoPE;
 }
 
 function getPsicoDefault() {
