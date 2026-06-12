@@ -2,11 +2,10 @@ import { CONFIG, EQUIPOS_FLAGS } from './config.js';
 
 export async function getPartidosMundial() {
   try {
-    const res = await fetch(
-      `${CONFIG.FOOTBALL_DATA_BASE}/competitions/${CONFIG.WC_COMPETITION_ID}/matches?status=SCHEDULED,LIVE,FINISHED`,
-      { headers: { 'X-Auth-Token': CONFIG.FOOTBALL_DATA_TOKEN } }
-    );
-    if (!res.ok) throw new Error(`football-data.org: ${res.status}`);
+    const res = await fetch("https://us-central1-predictor-mundial-2026-cfbfe.cloudfunctions.net/getMatches");
+
+    if (!res.ok) throw new Error(`Firebase Function getMatches: ${res.status}`);
+
     const data = await res.json();
     return data.matches || [];
   } catch (e) {
