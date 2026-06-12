@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analizar Partido — Predictor Mundial 2026</title>
+<link rel="stylesheet" href="css/styles.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-inner">
+    <div class="nav-logo">
+      <span class="logo-icon">⚽</span>
+      <span class="logo-text">Predictor</span>
+      <span class="logo-sub">Mundial 2026</span>
+    </div>
+    <div class="nav-center">
+      <a href="index.html" class="nav-link">Dashboard</a>
+      <a href="analisis.html" class="nav-link active">Analizar partido</a>
+      <a href="historial.html" class="nav-link">Historial</a>
+      <a href="calibrador.html" class="nav-link">Calibrador</a>
+    </div>
+    <div class="nav-right">
+      <div class="nav-stat">
+        <span class="nav-stat-val" id="precision-global">—</span>
+        <span class="nav-stat-label">Precisión</span>
+      </div>
+      <span class="nav-badge">Modelo v1.0</span>
+    </div>
+  </div>
+</nav>
+
+<main class="main">
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Analizar partido</h1>
+      <p class="page-sub">Seleccioná un partido para correr el modelo completo</p>
+    </div>
+  </div>
+
+  <div id="partido-selector" class="selector-section">
+    <div class="section-header">
+      <span class="section-title">Seleccionar partido</span>
+    </div>
+    <div id="partidos-disponibles" class="partidos-grid">
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <span>Cargando partidos disponibles...</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="analisis-container" style="display:none">
+
+    <div class="matchup-header">
+      <div class="team-block">
+        <span class="team-flag-big" id="flag-local">🏳</span>
+        <span class="team-name-big" id="nombre-local">—</span>
+        <span class="team-role">Local</span>
+      </div>
+      <div class="matchup-center">
+        <span class="matchup-vs">VS</span>
+        <span class="matchup-info" id="matchup-info">—</span>
+        <span class="matchup-estadio" id="matchup-estadio">—</span>
+      </div>
+      <div class="team-block">
+        <span class="team-flag-big" id="flag-visitante">🏳</span>
+        <span class="team-name-big" id="nombre-visitante">—</span>
+        <span class="team-role">Visitante</span>
+      </div>
+    </div>
+
+    <div id="loading-analisis" class="loading-full" style="display:none">
+      <div class="loading-steps">
+        <div class="loading-step" id="step-stats">
+          <div class="step-icon loading"></div>
+          <span>Cargando estadísticas de football-data.org...</span>
+        </div>
+        <div class="loading-step inactive" id="step-psico">
+          <div class="step-icon"></div>
+          <span>Analizando variables psicológicas con Claude AI...</span>
+        </div>
+        <div class="loading-step inactive" id="step-modelo">
+          <div class="step-icon"></div>
+          <span>Calculando predicción final...</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="resultado-analisis" style="display:none">
+
+      <div class="scores-section">
+        <div class="section-header">
+          <span class="section-title">Scores del modelo</span>
+          <span class="section-sub">Estadístico 60% · Psicológico 40% · Boost mundialista</span>
+        </div>
+        <div class="scores-grid">
+          <div class="score-panel" id="score-local-panel">
+            <div class="score-team-name" id="score-local-nombre">—</div>
+            <div class="score-bars">
+              <div class="score-bar-row">
+                <span class="score-bar-label">Estadístico</span>
+                <div class="score-bar-bg">
+                  <div class="score-bar-fill blue" id="bar-stat-local"></div>
+                </div>
+                <span class="score-bar-val" id="val-stat-local">—</span>
+              </div>
+              <div class="score-bar-row">
+                <span class="score-bar-label">Psicológico</span>
+                <div class="score-bar-bg">
+                  <div class="score-bar-fill purple" id="bar-psico-local"></div>
+                </div>
+                <span class="score-bar-val" id="val-psico-local">—</span>
+              </div>
+              <div class="score-bar-row">
+                <span class="score-bar-label">Boost Mundial</span>
+                <div class="score-bar-bg">
+                  <div class="score-bar-fill amber" id="bar-boost-local"></div>
+                </div>
+                <span class="score-bar-val" id="val-boost-local">—</span>
+              </div>
+            </div>
+            <div class="score-total">
+              <span class="score-total-label">Score total</span>
+              <span class="score-total-val" id="score-total-local">—</span>
+            </div>
+          </div>
+
+          <div class="score-divider">
+            <div class="score-diff" id="score-diff">—</div>
+            <div class="score-diff-label">diferencia</div>
+          </div>
+
+          <div class="score-panel" id="score-visitante-panel">
+            <div class="score-team-name" id="score-visitante-nombre">—</div>
+            <div class="score-bars">
+              <div class="score-bar-row">
+                <span class="score-bar-label">Estadístico</span>
+                <div class="score-bar-bg">
+                  <div class="score-bar-fill blue" id="bar-stat-visitante"></div>
+                </div>
+                <span class="score-bar-val" id="val-stat-visitante">—</span>
+              </div>
+              <div class="score-bar-row">
+                <span class="score-bar-label">Psicológico</span>
+                <div class="score-bar-bg">
+                  <div class="score-bar-fill purple" id="bar-psico-visitante"></div>
+                </div>
+                <span class="score-bar-val" id="val-psico-visitante">—</span>
+              </div>
+              <div class="score-bar-row">
+                <span class="score-bar-label">Boost Mundial</span>
+                <div class="score-bar-bg">
+                  <div class="score-bar-fill amber" id="bar-boost-visitante"></div>
+                </div>
+                <span class="score-bar-val" id="val-boost-visitante">—</span>
+              </div>
+            </div>
+            <div class="score-total">
+              <span class="score-total-label">Score total</span>
+              <span class="score-total-val" id="score-total-visitante">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="psico-breakdown">
+        <div class="section-header">
+          <span class="section-title">Análisis psicológico automático</span>
+          <span class="section-sub">Obtenido via Claude AI + web search en tiempo real</span>
+        </div>
+        <div class="psico-grid" id="psico-grid"></div>
+        <div class="narrativa-box" id="narrativa-box"></div>
+      </div>
+
+      <div class="apuestas-section">
+        <div class="section-header">
+          <span class="section-title">Apuestas recomendadas</span>
+          <span class="section-sub">Solo se muestran apuestas con valor esperado positivo (EV > 0)</span>
+        </div>
+        <div class="apuestas-grid" id="apuestas-grid"></div>
+      </div>
+
+      <div class="action-bar">
+        <div class="action-info" id="action-info"></div>
+        <button class="btn-save" id="btn-guardar" onclick="guardarPrediccion()">
+          💾 Guardar predicción
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<script type="module" src="js/firebase-init.js"></script>
+<script type="module" src="js/analisis.js"></script>
+</body>
+</html>

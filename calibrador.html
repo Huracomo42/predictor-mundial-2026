@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calibrador — Predictor Mundial 2026</title>
+<link rel="stylesheet" href="css/styles.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-inner">
+    <div class="nav-logo">
+      <span class="logo-icon">⚽</span>
+      <span class="logo-text">Predictor</span>
+      <span class="logo-sub">Mundial 2026</span>
+    </div>
+    <div class="nav-center">
+      <a href="index.html" class="nav-link">Dashboard</a>
+      <a href="analisis.html" class="nav-link">Analizar partido</a>
+      <a href="historial.html" class="nav-link">Historial</a>
+      <a href="calibrador.html" class="nav-link active">Calibrador</a>
+    </div>
+    <div class="nav-right">
+      <div class="nav-stat">
+        <span class="nav-stat-val" id="precision-global">—</span>
+        <span class="nav-stat-label">Precisión</span>
+      </div>
+      <span class="nav-badge" id="modelo-badge">Modelo v1.0</span>
+    </div>
+  </div>
+</nav>
+
+<main class="main">
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Calibrador de pesos</h1>
+      <p class="page-sub">El modelo se afina automáticamente con 20+ partidos</p>
+    </div>
+    <div id="calibracion-status" class="calibracion-badge">
+      <span id="partidos-para-calibrar">Necesita 20 partidos para calibrar</span>
+    </div>
+  </div>
+
+  <div class="split-layout">
+
+    <div class="split-left">
+
+      <section class="section">
+        <div class="section-header">
+          <span class="section-title">División principal</span>
+          <span class="section-sub">Estadístico vs Psicológico</span>
+        </div>
+        <div class="peso-item">
+          <div class="peso-header">
+            <span class="peso-nombre">Score estadístico</span>
+            <span class="peso-val blue" id="peso-stat-val">60%</span>
+          </div>
+          <input type="range" class="peso-slider" id="peso-stat" min="40" max="80" value="60" step="1" oninput="actualizarPesos()">
+          <div class="peso-desc">xG, forma, H2H, corners, goles concedidos, lesiones</div>
+        </div>
+        <div class="peso-item">
+          <div class="peso-header">
+            <span class="peso-nombre">Score psicológico</span>
+            <span class="peso-val purple" id="peso-psico-val">40%</span>
+          </div>
+          <div class="peso-desc">Calculado automáticamente como complemento del estadístico</div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <span class="section-title">Distribución psicológica</span>
+          <span class="section-sub">Del 40% psicológico total</span>
+        </div>
+
+        <div class="peso-item">
+          <div class="peso-header">
+            <span class="peso-nombre">Presión situacional</span>
+            <span class="peso-val blue" id="peso-presion-val">14%</span>
+          </div>
+          <input type="range" class="peso-slider" id="peso-presion" min="5" max="25" value="14" step="1" oninput="actualizarPesos()">
+          <div class="peso-desc">Necesita ganar, venganza, rival maldito, presión mediática</div>
+        </div>
+
+        <div class="peso-item">
+          <div class="peso-header">
+            <span class="peso-nombre">Factor local y ambiente</span>
+            <span class="peso-val green" id="peso-local-val">10%</span>
+          </div>
+          <input type="range" class="peso-slider" id="peso-local" min="3" max="20" value="10" step="1" oninput="actualizarPesos()">
+          <div class="peso-desc">Sede/local/visitante, altitud, proporción de afición</div>
+        </div>
+
+        <div class="peso-item">
+          <div class="peso-header">
+            <span class="peso-nombre">Liderazgo y cohesión</span>
+            <span class="peso-val purple" id="peso-liderazgo-val">10%</span>
+          </div>
+          <input type="range" class="peso-slider" id="peso-liderazgo" min="3" max="20" value="10" step="1" oninput="actualizarPesos()">
+          <div class="peso-desc">Líder disponible, conflicto interno, generación en peak</div>
+        </div>
+
+        <div class="peso-item">
+          <div class="peso-header">
+            <span class="peso-nombre">Momentum emocional</span>
+            <span class="peso-val amber" id="peso-momentum-val">6%</span>
+          </div>
+          <input type="range" class="peso-slider" id="peso-momentum" min="1" max="15" value="6" step="1" oninput="actualizarPesos()">
+          <div class="peso-desc">Underdog, clasificó sufriendo, partido previo humillante</div>
+        </div>
+
+        <div class="peso-warning" id="peso-warning" style="display:none">
+          ⚠️ Los pesos psicológicos no suman 40%. Ajustá los sliders.
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <span class="section-title">Boost mundialista</span>
+        </div>
+        <div class="boost-formula-box">
+          <div class="formula-line">boost_J1 = 1.0 + (0.10 × (1 − expectativa))</div>
+          <div class="formula-line">boost_J2 = 1.0 + (0.05 × (1 − expectativa))</div>
+          <div class="formula-line">boost_J3 = 1.0 (neutro)</div>
+          <div class="formula-note">expectativa = ranking FIFA / 48</div>
+        </div>
+        <div class="boost-coef-real" id="boost-coef-real">
+          <span class="coef-label">Coeficiente real calculado:</span>
+          <span class="coef-val" id="boost-coef-val">Insuficientes partidos</span>
+        </div>
+      </section>
+
+      <div class="action-bar">
+        <button class="btn-secondary" onclick="resetearPesos()">Resetear a v1.0</button>
+        <button class="btn-primary" onclick="guardarPesos()">Guardar pesos</button>
+      </div>
+
+    </div>
+
+    <div class="split-right">
+
+      <section class="section">
+        <div class="section-header">
+          <span class="section-title">Historial de versiones</span>
+        </div>
+        <div id="versiones-list">
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <span>Cargando versiones...</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="sugerencias-section" style="display:none">
+        <div class="section-header">
+          <span class="section-title">Sugerencias automáticas</span>
+          <span class="section-sub">Basadas en los últimos <span id="n-partidos-calibracion">0</span> partidos</span>
+        </div>
+        <div id="sugerencias-list"></div>
+        <button class="btn-primary btn-full" onclick="aplicarSugerencias()">
+          Aplicar sugerencias del modelo
+        </button>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <span class="section-title">Impacto de variables psicológicas</span>
+          <span class="section-sub">Correlación con aciertos observados</span>
+        </div>
+        <div id="impacto-variables">
+          <div class="empty-state">Disponible con 10+ partidos analizados</div>
+        </div>
+      </section>
+
+    </div>
+
+  </div>
+
+</main>
+
+<script type="module" src="js/firebase-init.js"></script>
+<script type="module" src="js/calibrador.js"></script>
+</body>
+</html>

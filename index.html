@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Predictor Mundial 2026</title>
+<link rel="stylesheet" href="css/styles.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="nav-inner">
+    <div class="nav-logo">
+      <span class="logo-icon">⚽</span>
+      <span class="logo-text">Predictor</span>
+      <span class="logo-sub">Mundial 2026</span>
+    </div>
+    <div class="nav-center">
+      <a href="index.html" class="nav-link active">Dashboard</a>
+      <a href="analisis.html" class="nav-link">Analizar partido</a>
+      <a href="historial.html" class="nav-link">Historial</a>
+      <a href="calibrador.html" class="nav-link">Calibrador</a>
+    </div>
+    <div class="nav-right">
+      <div class="nav-stat">
+        <span class="nav-stat-val" id="precision-global">—</span>
+        <span class="nav-stat-label">Precisión</span>
+      </div>
+      <span class="nav-badge" id="modelo-version">Modelo v1.0</span>
+    </div>
+  </div>
+</nav>
+
+<main class="main">
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-sub" id="fecha-hoy">Cargando partidos...</p>
+    </div>
+    <button class="btn-primary" onclick="window.location.href='analisis.html'">
+      + Analizar partido
+    </button>
+  </div>
+
+  <div class="stats-strip" id="stats-strip">
+    <div class="stat-card">
+      <span class="stat-val green" id="stat-seguras">—</span>
+      <span class="stat-label">Seguras acertadas</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-val blue" id="stat-medias">—</span>
+      <span class="stat-label">Medias acertadas</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-val amber" id="stat-malcriadas">—</span>
+      <span class="stat-label">Malcriadas acertadas</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-val purple" id="stat-ev">—</span>
+      <span class="stat-label">EV promedio</span>
+    </div>
+  </div>
+
+  <section class="section">
+    <div class="section-header">
+      <span class="section-title">Próximos partidos</span>
+      <span class="section-sub" id="jornada-label">Jornada 1 · Mundial 2026</span>
+    </div>
+    <div id="matches-container" class="matches-list">
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <span>Cargando partidos de football-data.org...</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="boost-section" style="display:none">
+    <div class="section-header">
+      <span class="section-title">Boost mundialista en tiempo real</span>
+      <span class="section-sub">xG pre-torneo vs xG real en el Mundial</span>
+    </div>
+    <div class="boost-card">
+      <div class="boost-header">
+        <span class="boost-col-label">Equipo</span>
+        <span class="boost-col-label">Pre-torneo</span>
+        <span class="boost-col-label">En torneo</span>
+        <span class="boost-col-label">Boost</span>
+      </div>
+      <div id="boost-list"></div>
+    </div>
+  </section>
+
+</main>
+
+<script type="module" src="js/firebase-init.js"></script>
+<script type="module" src="js/dashboard.js"></script>
+</body>
+</html>
