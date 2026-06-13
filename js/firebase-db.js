@@ -175,11 +175,12 @@ export async function getVersionesModelo() {
 
 export async function calcularMetricas() {
   const predicciones = await getTodasPredicciones();
-  const conResultado = predicciones.filter(p => p.resultado_real);
+  const ids = predicciones.map(p => p.id);
+  const statsPorPartido = await getStatsAvanzadasBatch(ids);
 
   const metricas = {
     total: predicciones.length,
-    con_resultado: conResultado.length,
+    con_resultado: 0,
     seguras: { total: 0, acertadas: 0 },
     medias: { total: 0, acertadas: 0 },
     malcriadas: { total: 0, acertadas: 0 },
@@ -187,21 +188,60 @@ export async function calcularMetricas() {
     ev_count: 0,
   };
 
-  conResultado.forEach(p => {
-    (p.apuestas || []).forEach(ap => {
-      if (ap.entro === null || ap.entro === undefined) return;
+  predicciones.forEach(p => {
+    const stats = statsPorPartido[p.id] || null;
+    const resultado = obtenerResultadoRealParaMetricas(p, stats);
+
+    if (!resultado) return;
+
+    metricas.con_resultado++;
+
+    const apuestas = Array.isArray(p.apuestas)
+      ? p.apuestas.filter(ap => ap && typeof ap === 'object')
+      : [];
+
+    apuestas.forEach(ap => {
       const tipo = ap.tipo;
-      if (metricas[tipo + 's']) {
-        metricas[tipo + 's'].total++;
-        if (ap.entro) metricas[tipo + 's'].acertadas++;
+      const bucket = tipo ? `${tipo}s` : null;
+
+      if (bucket && metricas[bucket]) {
+        metricas[bucket].total++;
+
+        if (ap.entro === true) {
+          metricas[bucket].acertadas++;
+        }
       }
-      metricas.ev_total += ap.EV || 0;
-      metricas.ev_count++;
+
+      if (ap.EV !== null && ap.EV !== undefined) {
+        metricas.ev_total += Number(ap.EV) || 0;
+        metricas.ev_count++;
+      }
     });
   });
 
   return metricas;
 }
+
+function obtenerResultadoRealParaMetricas(prediccion, statsAvanzadas) {
+  if (statsAvanzadas?.resultado_real) {
+    return {
+      fuente: 'fotmob',
+      goles_local: statsAvanzadas.resultado_real.goles_local,
+      goles_visitante: statsAvanzadas.resultado_real.goles_visitante,
+    };
+  }
+
+  if (prediccion?.resultado_real) {
+    return {
+      fuente: 'manual',
+      goles_local: prediccion.resultado_real.goles_local,
+      goles_visitante: prediccion.resultado_real.goles_visitante,
+    };
+  }
+
+  return null;
+}
+
 export async function getStatsAvanzadas(partidoId) {
   try {
     const snap = await getDoc(doc(db, 'stats_avanzadas', partidoId));
