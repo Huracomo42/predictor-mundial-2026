@@ -72,13 +72,23 @@ async function cargarPartidos() {
         return diff > -2 && diff < 7;
       })
       .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
+      const idsApi = new Set(partidos.map(p => p.id?.toString()));
 
-    if (proximosYHoy.length === 0) {
+      const prediccionesHuerfanas = predicciones
+        .filter(p => !idsApi.has(p.id?.toString()))
+        .map(p => convertirPrediccionAPartido(p));
+
+      const listaFinal = [
+        ...proximosYHoy,
+        ...prediccionesHuerfanas
+      ].sort((a, b) => new Date(a.utcDate || 0) - new Date(b.utcDate || 0));
+
+    if (listaFinal.length === 0) {
       container.innerHTML = `<div class="empty-state">Sin partidos en los próximos 7 días.</div>`;
       return;
     }
 
-    container.innerHTML = proximosYHoy.map(p => renderMatchCard(p, prediccionesMap)).join('');
+    container.innerHTML = listaFinal.map(p => renderMatchCard(p, prediccionesMap)).join('');
 
   } catch (e) {
     console.error('Error cargando partidos:', e);
@@ -186,6 +196,48 @@ async function cargarBoostMundialista() {
   } catch (e) {
     console.error('Error boost:', e);
   }
+}
+
+function convertirPrediccionAPartido(pred) {
+  const partido = pred.partido || {};
+
+  const nombreLocal =
+    partido.nombreLocal ||
+    partido.equipoLocal ||
+    partido.local ||
+    'Local';
+
+  const nombreVisitante =
+    partido.nombreVisitante ||
+    partido.equipoVisitante ||
+    partido.visitante ||
+    'Visitante';
+
+  return {
+    id: pred.id,
+    utcDate:
+      partido.fecha ||
+      pred.fecha ||
+      pred.guardado_en?.toDate?.()?.toISOString?.() ||
+      new Date().toISOString(),
+    status: pred.resultado_real ? 'FINISHED' : 'PREDICTED_SAVED',
+    group: partido.grupo || partido.group || '',
+    venue: partido.estadio || '',
+    homeTeam: {
+      name: nombreLocal,
+    },
+    awayTeam: {
+      name: nombreVisitante,
+    },
+    score: pred.resultado_real
+      ? {
+          fullTime: {
+            home: Number(pred.resultado_real.goles_local ?? 0),
+            away: Number(pred.resultado_real.goles_visitante ?? 0),
+          },
+        }
+      : null,
+  };
 }
 
 init();
