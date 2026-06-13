@@ -28,10 +28,28 @@ export async function getStatsEquipo(equipoId, equipoNombre) {
   let statsBase = null;
 
   try {
-    statsBase = await getStatsEquipoFootballData(equipoId, equipoNombre);
+    const statsPremundial = await getStatsEquipoPremundial(equipoId, equipoNombre);
+
+    if (statsPremundial && Number(statsPremundial.partidos_analizados || 0) > 0) {
+      statsBase = statsPremundial;
+
+      console.log(`Usando stats premundial para ${equipoNombre}`, {
+        partidos: statsPremundial.partidos_analizados,
+        fuente: statsPremundial.fuente,
+        statsPremundial,
+      });
+    }
   } catch (e) {
-    console.warn(`No se pudo usar football-data para ${equipoNombre}. Usando default.`, e);
-    statsBase = getStatsDefault(equipoNombre);
+    console.warn(`No se pudo cargar premundial para ${equipoNombre}`, e);
+  }
+
+  if (!statsBase) {
+    try {
+      statsBase = await getStatsEquipoFootballData(equipoId, equipoNombre);
+    } catch (e) {
+      console.warn(`No se pudo usar football-data para ${equipoNombre}. Usando default.`, e);
+      statsBase = getStatsDefault(equipoNombre);
+    }
   }
 
   try {
@@ -79,6 +97,71 @@ async function getStatsEquipoFootballData(equipoId, equipoNombre) {
   } catch (e) {
     console.error(`Error stats football-data ${equipoNombre}:`, e);
     return getStatsDefault(equipoNombre);
+  }
+}
+
+async function getFotmobTeamId(equipoNombre) {
+  try {
+    const res = await fetch("data/fotmob-teams.json");
+
+    if (!res.ok) return null;
+
+    const mapa = await res.json();
+
+    return (
+      mapa[equipoNombre] ||
+      mapa[normalizarNombreEquipoApi(equipoNombre)] ||
+      null
+    );
+  } catch (e) {
+    console.warn("No se pudo leer data/fotmob-teams.json", e);
+    return null;
+  }
+}
+
+function normalizarNombreEquipoApi(nombre) {
+  return String(nombre || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+async function getStatsEquipoPremundial(equipoId, equipoNombre) {
+  try {
+    const fotmobTeamId = await getFotmobTeamId(equipoNombre);
+
+    const idPremundial = fotmobTeamId || equipoId;
+
+    if (!idPremundial) return null;
+
+    const url = new URL(
+      "https://us-central1-predictor-mundial-2026-cfbfe.cloudfunctions.net/getTeamStatsPremundial"
+    );
+
+    url.searchParams.set("equipoId", idPremundial);
+    url.searchParams.set("equipoNombre", equipoNombre || "Equipo");
+
+    const res = await fetch(url.toString());
+
+    if (!res.ok) {
+      throw new Error(`Firebase Function getTeamStatsPremundial: ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    if (data && Number(data.partidos_analizados || 0) > 0) {
+      console.log(`Stats premundial encontradas para ${equipoNombre}`, {
+        equipoIdOriginal: equipoId,
+        fotmobTeamId,
+        fuente: data.fuente,
+        partidos: data.partidos_analizados,
+      });
+    }
+
+    return data;
+  } catch (e) {
+    console.warn(`No se pudo usar stats premundial para ${equipoNombre}`, e);
+    return null;
   }
 }
 
