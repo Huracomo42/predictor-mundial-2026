@@ -54,8 +54,19 @@ async function init() {
   }).join('');
 
   if (idParam) {
-    const p = futuros.find(x => x.id.toString() === idParam);
-    if (p) seleccionarPartido(JSON.stringify(p));
+    const p = partidos.find(x => x.id?.toString() === idParam);
+
+    if (p) {
+      seleccionarPartido(JSON.stringify(p));
+      return;
+    }
+
+    disponibles.innerHTML = `
+      <div class="empty-state">
+        No se encontró el partido seleccionado en la API actual.<br>
+        Puede que football-data no lo esté devolviendo o que el ID no coincida.
+      </div>
+    `;
   }
 }
 
