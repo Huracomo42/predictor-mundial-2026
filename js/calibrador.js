@@ -1,4 +1,11 @@
-import { getPesos, guardarPesos, getVersionesModelo, getTodasPredicciones, calcularMetricas } from './firebase-db.js';
+import {
+  getPesos,
+  guardarPesos,
+  getVersionesModelo,
+  getTodasPredicciones,
+  getStatsAvanzadasBatch,
+  calcularMetricas
+} from './firebase-db.js';
 import { PESOS_DEFAULT } from './config.js';
 
 let pesosActuales = { ...PESOS_DEFAULT, version: '1.0' };
@@ -122,22 +129,72 @@ async function cargarVersiones() {
 
 async function verificarCalibrador() {
   const predicciones = await getTodasPredicciones();
-  const conResultado = predicciones.filter(p => p.resultado_real);
+  const ids = predicciones.map(p => p.id);
+  const statsPorId = await getStatsAvanzadasBatch(ids);
+
+  const conResultado = [];
+  let conResultadoTotal = 0;
+  let conIAReal = 0;
+  let sinIAReal = 0;
+
+  predicciones.forEach(p => {
+    const statsFotmob = statsPorId[p.id];
+    const resultadoReal = statsFotmob?.resultado_real || p.resultado_real;
+
+    if (resultadoReal) {
+      conResultadoTotal++;
+    }
+
+    if (tieneIAReal(p)) {
+      conIAReal++;
+    }
+
+    if (resultadoReal && tieneIAReal(p)) {
+      conResultado.push({
+        ...p,
+        resultado_real: resultadoReal,
+        stats_fotmob: statsFotmob || null,
+        fuente_resultado:
+          statsFotmob?.resultado_real ? 'fotmob' : 'manual',
+      });
+    } else if (resultadoReal && !tieneIAReal(p)) {
+      sinIAReal++;
+    }
+  });
+
   const n = conResultado.length;
 
   const badge = document.getElementById('calibracion-status');
   const texto = document.getElementById('partidos-para-calibrar');
 
   if (n < 20) {
-    texto.textContent = `${n}/20 partidos con resultado. Calibración automática con 20+.`;
+    texto.textContent =
+      `${n}/20 predicciones calibrables. ` +
+      `${conResultadoTotal} con resultado real, ` +
+      `${conIAReal} con IA real, ` +
+      `${sinIAReal} excluidas por no tener IA real.`;
   } else {
     badge.classList.add('activo');
-    texto.textContent = `✓ ${n} partidos — calibración automática disponible`;
+    texto.textContent =
+      `✓ ${n} predicciones calibrables — calibración automática disponible`;
     await generarSugerencias(conResultado);
   }
 
   await calcularBoostReal(conResultado);
   await calcularImpactoVariables(conResultado);
+}
+
+function tieneIAReal(prediccion) {
+  const estado = String(prediccion?.analisis_ia_estado || '').toLowerCase();
+
+  return (
+    prediccion?.analisis_ia_cache === true ||
+    estado === 'generado' ||
+    estado === 'completado' ||
+    estado === 'ok' ||
+    estado === 'cache' ||
+    estado === 'cacheado'
+  );
 }
 
 async function generarSugerencias(conResultado) {
