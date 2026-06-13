@@ -580,17 +580,24 @@ function scoreMercado(ap) {
 
 function seleccionarApuestas(candidatos) {
   const usadas = new Set();
+  const gruposUsados = new Set();
 
-  const segura = elegirPorTipo(candidatos, 'segura', usadas);
-  const media = elegirPorTipo(candidatos, 'media', usadas);
-  const malcriada = elegirPorTipo(candidatos, 'malcriada', usadas);
+  const segura = elegirPorTipo(candidatos, 'segura', usadas, gruposUsados);
+  const media = elegirPorTipo(candidatos, 'media', usadas, gruposUsados);
+  const malcriada = elegirPorTipo(candidatos, 'malcriada', usadas, gruposUsados);
 
   return [segura, media, malcriada].filter(Boolean);
 }
 
-function elegirPorTipo(candidatos, tipo, usadas) {
+function elegirPorTipo(candidatos, tipo, usadas, gruposUsados) {
   const filtrados = candidatos.filter((ap) => {
     if (usadas.has(ap.mercado)) return false;
+
+    const grupo = grupoMercado(ap.mercado);
+
+    // Evita repetir mercados del mismo grupo.
+    // Ejemplo: no mostrar "Más de 1.5 goles" y "Menos de 3.5 goles" juntos.
+    if (gruposUsados.has(grupo)) return false;
 
     if (tipo === 'segura') {
       return ap.confianza >= 0.62 && ap.riesgo === 'bajo';
@@ -612,11 +619,57 @@ function elegirPorTipo(candidatos, tipo, usadas) {
   if (!elegido) return null;
 
   usadas.add(elegido.mercado);
+  gruposUsados.add(grupoMercado(elegido.mercado));
 
   return {
     ...elegido,
     tipo,
   };
+}
+
+function grupoMercado(mercado) {
+  const m = String(mercado || '').toLowerCase();
+
+  if (
+    m.includes('más de 1.5 goles') ||
+    m.includes('menos de 3.5 goles') ||
+    m.includes('total de goles') ||
+    m.includes('ambos equipos anotan')
+  ) {
+    return 'goles_totales';
+  }
+
+  if (
+    m.includes('gana') ||
+    m.includes('empata') ||
+    m.includes('doble oportunidad') ||
+    m.includes('hándicap') ||
+    m.includes('handicap')
+  ) {
+    return 'resultado';
+  }
+
+  if (m.includes('córner') || m.includes('corner')) {
+    return 'corners';
+  }
+
+  if (m.includes('tiros') || m.includes('arco')) {
+    return 'tiros';
+  }
+
+  if (m.includes('tarjeta') || m.includes('amarilla')) {
+    return 'tarjetas';
+  }
+
+  if (m.includes('marcador exacto') || m.includes('1-0') || m.includes('0-1') || m.includes('1-1')) {
+    return 'marcador_exacto';
+  }
+
+  if (m.includes('anota')) {
+    return 'equipo_anota';
+  }
+
+  return 'otros';
 }
 
 function generarApuestaSeguraAjustada(ctx) {
