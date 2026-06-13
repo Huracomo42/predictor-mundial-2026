@@ -121,110 +121,135 @@ function calcularBoost(rankingFIFA, jornada) {
 }
 
 function generarApuestas(totalLocal, totalVisitante, statsLocal, statsVisitante, partido, psico) {
-  const apuestas = [];
   const diff = totalLocal - totalVisitante;
-  const xgTotal = (statsLocal?.xg_promedio || 1.2) + (statsVisitante?.xg_promedio || 0.9);
-  const cornersTotal = (statsLocal?.corners_promedio || 4.5) + (statsVisitante?.corners_promedio || 4.0);
+  const absDiff = Math.abs(diff);
 
-  if (xgTotal < 2.1) {
-    const probUnder = Math.min(0.92, 0.55 + (2.1 - xgTotal) * 0.15);
-    const cuota = calcularCuota(probUnder);
-    const evCalc = calcularEV(probUnder, cuota);
-    if (evCalc > -0.05) {
-      apuestas.push({
-        tipo: 'segura',
-        mercado: 'Menos de 2.5 goles',
-        confianza: round2(probUnder),
-        cuota_estimada: cuota,
-        EV: round3(evCalc),
-        razon: `xG combinado proyectado de ${round2(xgTotal)} — perfil de partido cerrado. Ambos equipos en modo debut.`,
-      });
-    }
+  const xgTotal = (statsLocal?.xg_promedio || 1.2) + (statsVisitante?.xg_promedio || 1.2);
+  const cornersTotal = (statsLocal?.corners_promedio || 4.5) + (statsVisitante?.corners_promedio || 4.5);
+
+  const favorito = diff >= 0 ? partido.nombreLocal : partido.nombreVisitante;
+  const favoritoRol = diff >= 0 ? 'local' : 'visitante';
+
+  const underdog = diff >= 0 ? partido.nombreVisitante : partido.nombreLocal;
+
+  const segura = generarApuestaSegura(xgTotal, cornersTotal, partido);
+  const media = generarApuestaMedia(diff, absDiff, favorito, favoritoRol, partido);
+  const malcriada = generarApuestaMalcriada(diff, absDiff, xgTotal, favorito, underdog, partido, psico);
+
+  return [segura, media, malcriada];
+}
+
+function generarApuestaSegura(xgTotal, cornersTotal, partido) {
+  let mercado;
+  let prob;
+  let razon;
+
+  if (xgTotal <= 2.4) {
+    mercado = 'Menos de 3.5 goles';
+    prob = Math.min(0.82, 0.62 + (2.4 - xgTotal) * 0.08);
+    razon = `xG combinado proyectado de ${round2(xgTotal)}. Perfil de partido con margen para un under amplio.`;
+  } else if (cornersTotal <= 9.5) {
+    mercado = 'Menos de 10.5 córners';
+    prob = Math.min(0.78, 0.58 + (9.5 - cornersTotal) * 0.04);
+    razon = `Promedio combinado de corners de ${round2(cornersTotal)}. Mercado conservador de corners.`;
+  } else {
+    mercado = 'Más de 1.5 goles';
+    prob = 0.64;
+    razon = `El partido no muestra señales claras de under; se usa un mercado de goles amplio como opción conservadora.`;
   }
 
-  if (cornersTotal < 8.5) {
-    const probCorners = Math.min(0.88, 0.50 + (8.5 - cornersTotal) * 0.05);
-    const cuota = calcularCuota(probCorners);
-    const evCalc = calcularEV(probCorners, cuota);
-    if (evCalc > -0.05) {
-      apuestas.push({
-        tipo: 'segura',
-        mercado: 'Menos de 9.5 córners',
-        confianza: round2(probCorners),
-        cuota_estimada: cuota,
-        EV: round3(evCalc),
-        razon: `Promedio combinado de corners: ${round2(cornersTotal)}. Jornada ${partido.jornada} históricamente genera menos corners.`,
-      });
-    }
+  const cuota = calcularCuota(prob);
+  const evCalc = calcularEV(prob, cuota);
+  const recomendada = prob >= 0.65 && evCalc >= -0.05;
+
+  return {
+    tipo: 'segura',
+    mercado,
+    confianza: round2(prob),
+    cuota_estimada: cuota,
+    EV: round3(evCalc),
+    recomendada,
+    razon: recomendada
+      ? razon
+      : `${razon} Sin embargo, el valor estimado no supera claramente el umbral de recomendación.`,
+  };
+}
+
+function generarApuestaMedia(diff, absDiff, favorito, favoritoRol, partido) {
+  let mercado;
+  let prob;
+  let razon;
+
+  if (absDiff >= 0.8) {
+    mercado = favoritoRol === 'local'
+      ? `${favorito} gana o empata (1X)`
+      : `${favorito} gana o empata (X2)`;
+
+    prob = Math.min(0.76, 0.50 + absDiff * 0.07);
+    razon = `El score total favorece a ${favorito} por ${round2(absDiff)} puntos.`;
+  } else {
+    mercado = 'Empate o partido cerrado';
+    prob = 0.46 + Math.max(0, 0.8 - absDiff) * 0.08;
+    razon = `La diferencia de score es baja (${round2(absDiff)}), por lo que el modelo detecta un partido parejo.`;
   }
 
-  if (diff > 0.8) {
-    const probGana = Math.min(0.78, 0.45 + diff * 0.06);
-    const cuota = calcularCuota(probGana);
-    const evCalc = calcularEV(probGana, cuota);
-    if (evCalc > -0.05) {
-      apuestas.push({
-        tipo: 'media',
-        mercado: `${partido.nombreLocal} gana o empata (1X)`,
-        confianza: round2(probGana),
-        cuota_estimada: cuota,
-        EV: round3(evCalc),
-        razon: `Score total local ${round2(totalLocal)} vs ${round2(totalVisitante)} visitante. Ventaja de ${round2(diff)} puntos.`,
-      });
-    }
-  } else if (diff < -0.8) {
-    const probGana = Math.min(0.78, 0.45 + Math.abs(diff) * 0.06);
-    const cuota = calcularCuota(probGana);
-    const evCalc = calcularEV(probGana, cuota);
-    if (evCalc > -0.05) {
-      apuestas.push({
-        tipo: 'media',
-        mercado: `${partido.nombreVisitante} gana o empata (X2)`,
-        confianza: round2(probGana),
-        cuota_estimada: cuota,
-        EV: round3(evCalc),
-        razon: `Score visitante ${round2(totalVisitante)} supera al local ${round2(totalLocal)}. Ventaja de ${round2(Math.abs(diff))} puntos.`,
-      });
-    }
+  const cuota = calcularCuota(prob);
+  const evCalc = calcularEV(prob, cuota);
+  const recomendada = prob >= 0.52 && evCalc >= -0.05;
+
+  return {
+    tipo: 'media',
+    mercado,
+    confianza: round2(prob),
+    cuota_estimada: cuota,
+    EV: round3(evCalc),
+    recomendada,
+    razon: recomendada
+      ? razon
+      : `${razon} La señal existe, pero no es suficientemente fuerte para recomendarla como apuesta activa.`,
+  };
+}
+
+function generarApuestaMalcriada(diff, absDiff, xgTotal, favorito, underdog, partido, psico) {
+  let mercado;
+  let prob;
+  let cuota;
+  let razon;
+
+  const hayUnderdogPsico =
+    psico?.local?.underdog === true || psico?.visitante?.underdog === true;
+
+  if (absDiff >= 1.5 && xgTotal <= 2.2) {
+    mercado = `${favorito} gana 1-0 (marcador exacto)`;
+    prob = 0.16;
+    cuota = 18.0;
+    razon = `Favorito claro por score, pero con xG bajo (${round2(xgTotal)}). Perfil de victoria mínima.`;
+  } else if (hayUnderdogPsico) {
+    mercado = `${underdog} anota o evita goleada`;
+    prob = 0.22;
+    cuota = 5.5;
+    razon = `El componente psicológico detecta narrativa de underdog competitivo.`;
+  } else {
+    mercado = 'Empate 1-1';
+    prob = 0.14;
+    cuota = 7.5;
+    razon = `Partido sin señal extrema. Se propone marcador plausible de riesgo alto, no necesariamente recomendado.`;
   }
 
-  if (psico?.visitante?.underdog && !psico?.visitante?.lider_disponible === false) {
-    const probAmarillas = 0.72;
-    const cuota = 1.55;
-    const evCalc = calcularEV(probAmarillas, cuota);
-    if (evCalc > 0) {
-      apuestas.push({
-        tipo: 'media',
-        mercado: `${partido.nombreVisitante} +1.5 tarjetas amarillas`,
-        confianza: round2(probAmarillas),
-        cuota_estimada: cuota,
-        EV: round3(evCalc),
-        razon: 'Visitante con perfil físico + presión de debut. Histórico de faltas tácticas en partidos de alta presión.',
-      });
-    }
-  }
+  const evCalc = calcularEV(prob, cuota);
+  const recomendada = evCalc >= 0.20;
 
-  if (Math.abs(diff) > 1.5 && xgTotal < 1.8) {
-    const favorito = diff > 0 ? partido.nombreLocal : partido.nombreVisitante;
-    const probExacto = 0.18;
-    const cuota = 20.0;
-    const evCalc = calcularEV(probExacto, cuota);
-    if (evCalc > 0.5) {
-      apuestas.push({
-        tipo: 'malcriada',
-        mercado: `${favorito} gana 1-0 (marcador exacto)`,
-        confianza: round2(probExacto),
-        cuota_estimada: cuota,
-        EV: round3(evCalc),
-        razon: `Diferencia de score de ${round2(Math.abs(diff))} con xG bajo (${round2(xgTotal)}). Perfil de victoria mínima. EV positivo a cuota ~20.`,
-      });
-    }
-  }
-
-  return apuestas.sort((a, b) => {
-    const orden = { segura: 0, media: 1, malcriada: 2 };
-    return orden[a.tipo] - orden[b.tipo];
-  });
+  return {
+    tipo: 'malcriada',
+    mercado,
+    confianza: round2(prob),
+    cuota_estimada: cuota,
+    EV: round3(evCalc),
+    recomendada,
+    razon: recomendada
+      ? razon
+      : `${razon} El EV no alcanza el umbral para recomendarla activamente.`,
+  };
 }
 
 function calcularCuota(prob) {
