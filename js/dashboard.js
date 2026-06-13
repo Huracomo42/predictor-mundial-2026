@@ -72,10 +72,10 @@ async function cargarPartidos() {
         return diff > -2 && diff < 7;
       })
       .sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
-      const idsApi = new Set(partidos.map(p => p.id?.toString()));
+      const idsVisibles = new Set(proximosYHoy.map(p => p.id?.toString()));
 
       const prediccionesHuerfanas = predicciones
-        .filter(p => !idsApi.has(p.id?.toString()))
+        .filter(p => !idsVisibles.has(p.id?.toString()))
         .map(p => convertirPrediccionAPartido(p));
 
       const listaFinal = [
@@ -83,8 +83,8 @@ async function cargarPartidos() {
         ...prediccionesHuerfanas
       ].sort((a, b) => new Date(a.utcDate || 0) - new Date(b.utcDate || 0));
 
-    if (listaFinal.length === 0) {
-      container.innerHTML = `<div class="empty-state">Sin partidos en los próximos 7 días.</div>`;
+    if (partidos.length === 0 && predicciones.length === 0) {
+      container.innerHTML = `<div class="empty-state">No se encontraron partidos ni predicciones guardadas.</div>`;
       return;
     }
 
