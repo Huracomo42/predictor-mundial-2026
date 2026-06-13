@@ -70,30 +70,90 @@ export async function guardarResultado(partidoId, resultado) {
 }
 
 function evaluarApuestas(apuestas, resultado) {
-  return apuestas.map(ap => {
-    let entro = null;
-    const goles = resultado.goles_local + resultado.goles_visitante;
-    const corners = resultado.corners_totales;
-    const amarillasVisitante = resultado.amarillas_visitante;
+  if (!Array.isArray(apuestas) || apuestas.length === 0) return [];
 
-    if (ap.mercado.includes('Menos de 2.5 goles')) {
-      entro = goles < 2.5;
-    } else if (ap.mercado.includes('Menos de 9.5 córners')) {
-      entro = corners < 9.5;
-    } else if (ap.mercado.includes('+1.5 tarjetas')) {
-      entro = amarillasVisitante >= 2;
-    } else if (ap.mercado.includes('gana o empata')) {
-      const esLocal = ap.mercado.includes('1X');
-      if (esLocal) entro = resultado.goles_local >= resultado.goles_visitante;
-      else entro = resultado.goles_visitante >= resultado.goles_local;
-    } else if (ap.mercado.includes('1-0')) {
-      entro = resultado.goles_local === 1 && resultado.goles_visitante === 0;
-    } else if (ap.mercado.includes('0-1')) {
-      entro = resultado.goles_local === 0 && resultado.goles_visitante === 1;
+  const golesLocal = Number(resultado.goles_local ?? resultado.golesLocal ?? 0);
+  const golesVisitante = Number(resultado.goles_visitante ?? resultado.golesVisitante ?? 0);
+  const golesTotales = golesLocal + golesVisitante;
+
+  const cornersTotales = Number(resultado.corners_total ?? resultado.cornersTotales ?? 0);
+
+  const amarillasLocal = Number(resultado.amarillas_local ?? resultado.tarjetas_local ?? 0);
+  const amarillasVisitante = Number(resultado.amarillas_visitante ?? resultado.tarjetas_visitante ?? 0);
+  const amarillasTotales = amarillasLocal + amarillasVisitante;
+
+  const ambosAnotan = golesLocal > 0 && golesVisitante > 0;
+
+  return apuestas.map((apuesta) => {
+    const mercado = normalizarTextoApuesta(apuesta.mercado || apuesta.tipo || "");
+    let entro = null;
+
+    // Goles
+    if (mercado.includes("menos de 2.5 goles")) {
+      entro = golesTotales < 2.5;
+    } else if (mercado.includes("menos de 3.5 goles")) {
+      entro = golesTotales < 3.5;
+    } else if (mercado.includes("mas de 1.5 goles") || mercado.includes("más de 1.5 goles")) {
+      entro = golesTotales > 1.5;
     }
 
-    return { ...ap, entro };
+    // Córners
+    else if (mercado.includes("menos de 9.5 corners") || mercado.includes("menos de 9.5 córners")) {
+      entro = cornersTotales < 9.5;
+    } else if (mercado.includes("menos de 10.5 corners") || mercado.includes("menos de 10.5 córners")) {
+      entro = cornersTotales < 10.5;
+    }
+
+    // Doble oportunidad
+    else if (mercado.includes("local gana o empata")) {
+      entro = golesLocal >= golesVisitante;
+    } else if (mercado.includes("visitante gana o empata")) {
+      entro = golesVisitante >= golesLocal;
+    }
+
+    // Partido cerrado
+    else if (mercado.includes("empate o partido cerrado")) {
+      const diferenciaGoles = Math.abs(golesLocal - golesVisitante);
+      entro = diferenciaGoles <= 1;
+    }
+
+    // Marcadores exactos
+    else if (mercado.includes("marcador exacto 1-0")) {
+      entro = golesLocal === 1 && golesVisitante === 0;
+    } else if (mercado.includes("marcador exacto 0-1")) {
+      entro = golesLocal === 0 && golesVisitante === 1;
+    } else if (mercado.includes("empate 1-1")) {
+      entro = golesLocal === 1 && golesVisitante === 1;
+    }
+
+    // Ambos anotan
+    else if (mercado.includes("ambos equipos anotan")) {
+      entro = ambosAnotan;
+    }
+
+    // Tarjetas
+    else if (
+      mercado.includes("mas de 1.5 tarjetas") ||
+      mercado.includes("más de 1.5 tarjetas") ||
+      mercado.includes("+1.5 tarjetas")
+    ) {
+      entro = amarillasTotales > 1.5;
+    }
+
+    return {
+      ...apuesta,
+      entro,
+      evaluada: entro !== null,
+    };
   });
+}
+
+function normalizarTextoApuesta(texto) {
+  return String(texto || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
 }
 
 async function actualizarBoostMundialista(equipo, xgReal, xgPreTorneo) {
