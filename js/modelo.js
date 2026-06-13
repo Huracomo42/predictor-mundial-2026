@@ -158,18 +158,35 @@ function generarApuestas({
   const diffPsico = scorePsicoLocal - scorePsicoVisitante;
   const diffBoost = boostLocal - boostVisitante;
 
-  const xgTotal =
-    Number(statsLocal?.xg_promedio || 1.2) +
-    Number(statsVisitante?.xg_promedio || 1.2);
-
-  const cornersTotal =
-    Number(statsLocal?.corners_promedio || 4.5) +
-    Number(statsVisitante?.corners_promedio || 4.5);
-
   const favorito = diffTotal >= 0 ? partido.nombreLocal : partido.nombreVisitante;
   const underdog = diffTotal >= 0 ? partido.nombreVisitante : partido.nombreLocal;
   const favoritoRol = diffTotal >= 0 ? 'local' : 'visitante';
   const underdogRol = diffTotal >= 0 ? 'visitante' : 'local';
+
+  const statsFavorito = favoritoRol === 'local' ? statsLocal : statsVisitante;
+  const statsUnderdog = underdogRol === 'local' ? statsLocal : statsVisitante;
+
+  const xgLocal = Number(statsLocal?.xg_promedio ?? statsLocal?.goles_promedio ?? 1.2);
+  const xgVisitante = Number(statsVisitante?.xg_promedio ?? statsVisitante?.goles_promedio ?? 1.2);
+  const xgTotal = xgLocal + xgVisitante;
+
+  const golesLocal = Number(statsLocal?.goles_promedio || 1.2);
+  const golesVisitante = Number(statsVisitante?.goles_promedio || 1.2);
+  const golesTotal = golesLocal + golesVisitante;
+
+  const concedidosLocal = Number(statsLocal?.goles_concedidos_promedio || 1.2);
+  const concedidosVisitante = Number(statsVisitante?.goles_concedidos_promedio || 1.2);
+
+  const cornersLocal = Number(statsLocal?.corners_promedio || 4.5);
+  const cornersVisitante = Number(statsVisitante?.corners_promedio || 4.5);
+  const cornersTotal = cornersLocal + cornersVisitante;
+
+  const tirosPuertaLocal = Number(statsLocal?.tiros_puerta_promedio || 0);
+  const tirosPuertaVisitante = Number(statsVisitante?.tiros_puerta_promedio || 0);
+
+  const amarillasLocal = Number(statsLocal?.amarillas_promedio || 0);
+  const amarillasVisitante = Number(statsVisitante?.amarillas_promedio || 0);
+  const amarillasTotal = amarillasLocal + amarillasVisitante;
 
   const psicoFavorito = favoritoRol === 'local' ? psico?.local : psico?.visitante;
   const psicoUnderdog = underdogRol === 'local' ? psico?.local : psico?.visitante;
@@ -203,12 +220,34 @@ function generarApuestas({
     diffStat,
     diffPsico,
     diffBoost,
+
+    xgLocal,
+    xgVisitante,
     xgTotal,
+    golesLocal,
+    golesVisitante,
+    golesTotal,
+    concedidosLocal,
+    concedidosVisitante,
+
+    cornersLocal,
+    cornersVisitante,
     cornersTotal,
+
+    tirosPuertaLocal,
+    tirosPuertaVisitante,
+
+    amarillasLocal,
+    amarillasVisitante,
+    amarillasTotal,
+
     favorito,
     underdog,
     favoritoRol,
     underdogRol,
+    statsFavorito,
+    statsUnderdog,
+
     estadisticaYPsicoAlineadas,
     estadisticaYPsicoContradictorias,
     favoritoConPresion,
@@ -218,11 +257,356 @@ function generarApuestas({
 
   console.log('Contexto apuestas', contexto);
 
-  const segura = generarApuestaSeguraAjustada(contexto);
-  const media = generarApuestaMediaAjustada(contexto);
-  const malcriada = generarApuestaMalcriadaAjustada(contexto);
+  const candidatos = generarMercadosCandidatos(contexto);
+  const rankeados = rankearMercados(candidatos);
 
-  return [segura, media, malcriada];
+  return seleccionarApuestas(rankeados);
+}
+
+function generarMercadosCandidatos(ctx) {
+  const candidatos = [];
+
+  agregarMercado(candidatos, mercadoGanadorFavorito(ctx));
+  agregarMercado(candidatos, mercadoDobleOportunidadFavorito(ctx));
+  agregarMercado(candidatos, mercadoHandicapUnderdog(ctx));
+  agregarMercado(candidatos, mercadoOver15Goles(ctx));
+  agregarMercado(candidatos, mercadoUnder35Goles(ctx));
+  agregarMercado(candidatos, mercadoAmbosAnotan(ctx));
+  agregarMercado(candidatos, mercadoEquipoFavoritoMas15Goles(ctx));
+  agregarMercado(candidatos, mercadoEquipoUnderdogAnota(ctx));
+  agregarMercado(candidatos, mercadoCornersOver(ctx));
+  agregarMercado(candidatos, mercadoTirosPuertaFavorito(ctx));
+  agregarMercado(candidatos, mercadoTarjetasOver(ctx));
+  agregarMercado(candidatos, mercadoPartidoCerrado(ctx));
+  agregarMercado(candidatos, mercadoMarcadorExacto(ctx));
+
+  return candidatos;
+}
+
+function mercadoGanadorFavorito(ctx) {
+  if (ctx.absDiffTotal < 1.0) return null;
+
+  const ataqueFavorito = Number(ctx.statsFavorito?.goles_promedio || 1.2);
+  const defensaUnderdog = Number(ctx.statsUnderdog?.goles_concedidos_promedio || 1.2);
+
+  let prob = 0.48 + ctx.absDiffTotal * 0.045;
+
+  if (ctx.estadisticaYPsicoAlineadas) prob += 0.04;
+  if (ataqueFavorito >= 1.8) prob += 0.03;
+  if (defensaUnderdog >= 1.4) prob += 0.03;
+  if (ctx.favoritoConPresion) prob -= 0.05;
+
+  return {
+    mercado: `${ctx.favorito} gana`,
+    confianza: prob,
+    riesgo: 'medio',
+    razon: `El score total favorece a ${ctx.favorito} por ${round2(ctx.absDiffTotal)} puntos. La lectura permite ganador directo si la cuota acompaña.`,
+  };
+}
+
+function mercadoDobleOportunidadFavorito(ctx) {
+  if (ctx.absDiffTotal < 0.5) return null;
+  if (ctx.absDiffTotal >= 1.8) return null;
+
+  let prob = 0.58 + ctx.absDiffTotal * 0.06;
+
+  if (ctx.favoritoConPresion) prob -= 0.04;
+  if (ctx.estadisticaYPsicoAlineadas) prob += 0.03;
+
+  const mercado =
+    ctx.favoritoRol === 'local'
+      ? `${ctx.favorito} gana o empata (1X)`
+      : `${ctx.favorito} gana o empata (X2)`;
+
+  return {
+    mercado,
+    confianza: prob,
+    riesgo: 'bajo',
+    razon: `Ventaja moderada para ${ctx.favorito}. La doble oportunidad aparece solo como cobertura cuando el favoritismo no es aplastante.`,
+  };
+}
+
+function mercadoHandicapUnderdog(ctx) {
+  if (ctx.absDiffTotal > 1.4) return null;
+
+  let prob = 0.57;
+
+  if (ctx.underdogConMomentum) prob += 0.05;
+  if (ctx.estadisticaYPsicoContradictorias) prob += 0.04;
+  if (ctx.xgTotal <= 2.5) prob += 0.03;
+
+  return {
+    mercado: `${ctx.underdog} +1.5 hándicap`,
+    confianza: prob,
+    riesgo: 'bajo',
+    razon: `La diferencia no es amplia y el perfil del partido no sugiere goleada. Se protege al underdog con hándicap positivo.`,
+  };
+}
+
+function mercadoOver15Goles(ctx) {
+  const ataqueTotal = ctx.golesLocal + ctx.golesVisitante;
+  const defensasVulnerables = ctx.concedidosLocal + ctx.concedidosVisitante;
+
+  if (ataqueTotal < 2.2 && ctx.xgTotal < 2.0) return null;
+
+  let prob = 0.58;
+
+  if (ataqueTotal >= 2.8) prob += 0.06;
+  if (ctx.xgTotal >= 2.2) prob += 0.05;
+  if (defensasVulnerables >= 2.2) prob += 0.04;
+
+  return {
+    mercado: 'Más de 1.5 goles',
+    confianza: prob,
+    riesgo: 'bajo',
+    razon: `Los promedios ofensivos y de xG sugieren un partido con al menos dos goles como escenario razonable.`,
+  };
+}
+
+function mercadoUnder35Goles(ctx) {
+  if (ctx.xgTotal > 3.2 && ctx.golesTotal > 3.2) return null;
+
+  let prob = 0.60;
+
+  if (ctx.xgTotal <= 2.6) prob += 0.06;
+  if (ctx.concedidosLocal <= 1.0 || ctx.concedidosVisitante <= 1.0) prob += 0.03;
+  if (ctx.estadisticaYPsicoContradictorias) prob += 0.03;
+
+  return {
+    mercado: 'Menos de 3.5 goles',
+    confianza: prob,
+    riesgo: 'bajo',
+    razon: `El perfil combinado no apunta a marcador desbordado. Se usa un under amplio como mercado conservador.`,
+  };
+}
+
+function mercadoAmbosAnotan(ctx) {
+  if (ctx.golesLocal < 1.1 || ctx.golesVisitante < 1.1) return null;
+
+  let prob = 0.46;
+
+  if (ctx.golesLocal >= 1.5 && ctx.golesVisitante >= 1.5) prob += 0.08;
+  if (ctx.concedidosLocal >= 1.0 && ctx.concedidosVisitante >= 1.0) prob += 0.06;
+  if (ctx.xgLocal >= 1.0 && ctx.xgVisitante >= 1.0) prob += 0.04;
+
+  return {
+    mercado: 'Ambos equipos anotan',
+    confianza: prob,
+    riesgo: 'medio',
+    razon: `Ambos equipos tienen señales ofensivas suficientes y conceden oportunidades. Mercado de goles con riesgo medio.`,
+  };
+}
+
+function mercadoEquipoFavoritoMas15Goles(ctx) {
+  const ataqueFavorito = Number(ctx.statsFavorito?.goles_promedio || 0);
+  const concedeUnderdog = Number(ctx.statsUnderdog?.goles_concedidos_promedio || 0);
+
+  if (ataqueFavorito < 1.7 && concedeUnderdog < 1.3) return null;
+
+  let prob = 0.45;
+
+  if (ataqueFavorito >= 2.0) prob += 0.08;
+  if (concedeUnderdog >= 1.4) prob += 0.07;
+  if (ctx.absDiffTotal >= 1.2) prob += 0.04;
+
+  return {
+    mercado: `${ctx.favorito} más de 1.5 goles`,
+    confianza: prob,
+    riesgo: 'medio',
+    razon: `${ctx.favorito} combina ventaja de score con capacidad ofensiva reciente. Se explora mercado de goles del equipo.`,
+  };
+}
+
+function mercadoEquipoUnderdogAnota(ctx) {
+  const ataqueUnderdog = Number(ctx.statsUnderdog?.goles_promedio || 0);
+  const concedeFavorito = Number(ctx.statsFavorito?.goles_concedidos_promedio || 0);
+
+  if (ataqueUnderdog < 1.0 && !ctx.underdogConMomentum) return null;
+
+  let prob = 0.36;
+
+  if (ataqueUnderdog >= 1.4) prob += 0.06;
+  if (concedeFavorito >= 1.0) prob += 0.05;
+  if (ctx.underdogConMomentum) prob += 0.06;
+
+  return {
+    mercado: `${ctx.underdog} anota`,
+    confianza: prob,
+    cuota_estimada: 2.8,
+    riesgo: 'alto',
+    razon: `El underdog muestra señales ofensivas o momentum psicológico. Es una lectura agresiva, no conservadora.`,
+  };
+}
+
+function mercadoCornersOver(ctx) {
+  if (!ctx.cornersTotal || ctx.cornersTotal < 8.0) return null;
+
+  let prob = 0.52;
+
+  if (ctx.cornersTotal >= 9.5) prob += 0.07;
+  if (ctx.cornersTotal >= 10.5) prob += 0.04;
+
+  return {
+    mercado: 'Más de 8.5 córners',
+    confianza: prob,
+    riesgo: prob >= 0.60 ? 'bajo' : 'medio',
+    razon: `El promedio combinado de córners es ${round2(ctx.cornersTotal)}. El partido proyecta volumen por bandas o ataques frecuentes.`,
+  };
+}
+
+function mercadoTirosPuertaFavorito(ctx) {
+  const tirosPuertaFavorito =
+    ctx.favoritoRol === 'local'
+      ? ctx.tirosPuertaLocal
+      : ctx.tirosPuertaVisitante;
+
+  if (!tirosPuertaFavorito || tirosPuertaFavorito < 4.2) return null;
+
+  let prob = 0.50;
+
+  if (tirosPuertaFavorito >= 5.0) prob += 0.08;
+  if (ctx.absDiffTotal >= 1.0) prob += 0.04;
+
+  return {
+    mercado: `${ctx.favorito} más de 4.5 tiros al arco`,
+    confianza: prob,
+    riesgo: 'medio',
+    razon: `${ctx.favorito} tiene promedio alto de tiros al arco y ventaja global en el modelo.`,
+  };
+}
+
+function mercadoTarjetasOver(ctx) {
+  if (!ctx.amarillasTotal || ctx.amarillasTotal < 2.0) return null;
+
+  let prob = 0.50;
+
+  if (ctx.amarillasTotal >= 3.0) prob += 0.07;
+  if (ctx.estadisticaYPsicoContradictorias) prob += 0.04;
+
+  return {
+    mercado: 'Más de 2.5 tarjetas',
+    confianza: prob,
+    riesgo: 'medio',
+    razon: `El promedio combinado de amarillas es ${round2(ctx.amarillasTotal)}. Puede haber fricción competitiva.`,
+  };
+}
+
+function mercadoPartidoCerrado(ctx) {
+  if (ctx.absDiffTotal > 0.8) return null;
+
+  let prob = 0.50;
+
+  if (ctx.xgTotal <= 2.5) prob += 0.05;
+  if (ctx.estadisticaYPsicoContradictorias) prob += 0.05;
+
+  return {
+    mercado: 'Empate o partido cerrado',
+    confianza: prob,
+    riesgo: 'medio',
+    razon: `La diferencia total es baja (${round2(ctx.absDiffTotal)}). El modelo espera un partido de márgenes cortos.`,
+  };
+}
+
+function mercadoMarcadorExacto(ctx) {
+  if (ctx.xgTotal <= 2.4 && ctx.absDiffTotal >= 1.0) {
+    return {
+      mercado:
+        ctx.favoritoRol === 'local'
+          ? `${ctx.favorito} gana 1-0 (marcador exacto)`
+          : `${ctx.favorito} gana 0-1 (marcador exacto)`,
+      confianza: 0.16,
+      cuota_estimada: 12.0,
+      riesgo: 'alto',
+      razon: `Favorito con ventaja, pero partido de xG bajo. Se propone victoria corta como lectura de alto riesgo.`,
+    };
+  }
+
+  return {
+    mercado: 'Empate 1-1',
+    confianza: 0.14,
+    cuota_estimada: 7.5,
+    riesgo: 'alto',
+    razon: `Marcador plausible de riesgo alto cuando no hay señal extrema de goleada.`,
+  };
+}
+
+function agregarMercado(candidatos, mercado) {
+  if (!mercado) return;
+  if (!mercado.mercado) return;
+
+  const prob = Math.max(0.01, Math.min(0.95, Number(mercado.confianza || 0.5)));
+  const cuota = mercado.cuota_estimada || calcularCuota(prob);
+  const evCalc = calcularEV(prob, cuota);
+
+  candidatos.push({
+    ...mercado,
+    confianza: round2(prob),
+    cuota_estimada: cuota,
+    EV: round3(evCalc),
+    recomendada: mercado.recomendada ?? evCalc >= 0.02,
+  });
+}
+
+function rankearMercados(candidatos) {
+  return candidatos
+    .filter(Boolean)
+    .sort((a, b) => {
+      const scoreA = scoreMercado(a);
+      const scoreB = scoreMercado(b);
+      return scoreB - scoreA;
+    });
+}
+
+function scoreMercado(ap) {
+  const confianza = Number(ap.confianza || 0);
+  const ev = Number(ap.EV || 0);
+  const riesgoPenalty =
+    ap.riesgo === 'bajo' ? 0.05 :
+    ap.riesgo === 'medio' ? 0 :
+    -0.08;
+
+  return confianza + ev * 0.35 + riesgoPenalty;
+}
+
+function seleccionarApuestas(candidatos) {
+  const usadas = new Set();
+
+  const segura = elegirPorTipo(candidatos, 'segura', usadas);
+  const media = elegirPorTipo(candidatos, 'media', usadas);
+  const malcriada = elegirPorTipo(candidatos, 'malcriada', usadas);
+
+  return [segura, media, malcriada].filter(Boolean);
+}
+
+function elegirPorTipo(candidatos, tipo, usadas) {
+  const filtrados = candidatos.filter((ap) => {
+    if (usadas.has(ap.mercado)) return false;
+
+    if (tipo === 'segura') {
+      return ap.confianza >= 0.62 && ap.riesgo === 'bajo';
+    }
+
+    if (tipo === 'media') {
+      return ap.confianza >= 0.42 && ap.confianza < 0.68 && ap.riesgo !== 'alto';
+    }
+
+    if (tipo === 'malcriada') {
+      return ap.riesgo === 'alto' || ap.cuota_estimada >= 4.5;
+    }
+
+    return false;
+  });
+
+  const elegido = filtrados[0];
+
+  if (!elegido) return null;
+
+  usadas.add(elegido.mercado);
+
+  return {
+    ...elegido,
+    tipo,
+  };
 }
 
 function generarApuestaSeguraAjustada(ctx) {
