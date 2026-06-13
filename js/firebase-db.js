@@ -201,6 +201,8 @@ export async function calcularMetricas() {
       : [];
 
     apuestas.forEach(ap => {
+      if (ap.entro === null || ap.entro === undefined) return;
+
       const tipo = ap.tipo;
       const bucket = tipo ? `${tipo}s` : null;
 
