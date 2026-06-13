@@ -58,6 +58,30 @@ export async function getStatsEquipo(equipoId, equipoNombre) {
   }
 }
 
+async function getStatsEquipoFootballData(equipoId, equipoNombre) {
+  try {
+    if (!equipoId) return getStatsDefault(equipoNombre);
+
+    const url = new URL(
+      "https://us-central1-predictor-mundial-2026-cfbfe.cloudfunctions.net/getTeamStats"
+    );
+
+    url.searchParams.set("equipoId", equipoId);
+    url.searchParams.set("equipoNombre", equipoNombre || "Equipo");
+
+    const res = await fetch(url.toString());
+
+    if (!res.ok) {
+      throw new Error(`Firebase Function getTeamStats: ${res.status}`);
+    }
+
+    return await res.json();
+  } catch (e) {
+    console.error(`Error stats football-data ${equipoNombre}:`, e);
+    return getStatsDefault(equipoNombre);
+  }
+}
+
 async function getStatsEquipoFotmob(equipoNombre) {
   if (!equipoNombre) return null;
 
