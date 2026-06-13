@@ -221,3 +221,15 @@ export async function getStatsAvanzadasBatch(partidoIds) {
 
   return out;
 }
+export async function getTodasStatsAvanzadas() {
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'stats_avanzadas'), orderBy('actualizado_en', 'desc'))
+    );
+
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    console.error('Error leyendo todas las stats avanzadas:', e);
+    return [];
+  }
+}

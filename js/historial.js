@@ -2,7 +2,7 @@ import {
   getTodasPredicciones,
   guardarResultado,
   calcularMetricas,
-  getStatsAvanzadasBatch
+  getTodasStatsAvanzadas
 } from './firebase-db.js';
 
 let todasPredicciones = [];
@@ -119,24 +119,99 @@ async function cargarHistorial() {
   const container = document.getElementById('historial-container');
 
   try {
-    todasPredicciones = await getTodasPredicciones();
+    const predicciones = await getTodasPredicciones();
+    const statsAvanzadas = await getTodasStatsAvanzadas();
 
-    const ids = todasPredicciones.map(p => p.id);
-    const statsPorPartido = await getStatsAvanzadasBatch(ids);
+    const prediccionesPorId = {};
+    predicciones.forEach(p => {
+      prediccionesPorId[p.id] = p;
+    });
 
-    todasPredicciones = todasPredicciones.map(p => ({
-      ...p,
-      stats_fotmob: statsPorPartido[p.id] || null,
-    }));
+    const statsPorId = {};
+    statsAvanzadas.forEach(s => {
+      statsPorId[s.id] = s;
+    });
+
+    const idsUnicos = new Set([
+      ...predicciones.map(p => p.id),
+      ...statsAvanzadas.map(s => s.id),
+    ]);
+
+    todasPredicciones = Array.from(idsUnicos).map(id => {
+      const pred = prediccionesPorId[id] || null;
+      const stats = statsPorId[id] || null;
+
+      if (pred) {
+        return {
+          ...pred,
+          id,
+          tipo_registro: stats ? 'prediccion_con_stats' : 'prediccion_sin_stats',
+          stats_fotmob: stats,
+        };
+      }
+
+      return crearRegistroSoloFotmob(id, stats);
+    });
+
+    todasPredicciones.sort((a, b) => {
+      const fechaA = obtenerFechaOrden(a);
+      const fechaB = obtenerFechaOrden(b);
+      return fechaB - fechaA;
+    });
+
+    const totalPredicciones = todasPredicciones.filter(p => p.tiene_prediccion !== false).length;
+    const totalSoloFotmob = todasPredicciones.filter(p => p.tiene_prediccion === false).length;
 
     document.getElementById('historial-count').textContent =
-      `${todasPredicciones.length} partido${todasPredicciones.length !== 1 ? 's' : ''} analizado${todasPredicciones.length !== 1 ? 's' : ''}`;
+      `${totalPredicciones} predicción(es) · ${totalSoloFotmob} partido(s) solo FotMob`;
 
     renderHistorial(todasPredicciones);
   } catch (e) {
     console.error('Error cargando historial:', e);
     container.innerHTML = `<div class="empty-state">Error cargando historial.</div>`;
   }
+}
+
+function crearRegistroSoloFotmob(id, statsDoc) {
+  const fd = statsDoc?.football_data || {};
+  const resultado = statsDoc?.resultado_real || {};
+
+  return {
+    id,
+    tiene_prediccion: false,
+    tipo_registro: 'solo_fotmob',
+    stats_fotmob: statsDoc,
+    resultado_real: resultado,
+    partido: {
+      nombreLocal:
+        fd.local ||
+        fd.homeTeam ||
+        statsDoc?.partido?.local ||
+        statsDoc?.local ||
+        'Local',
+      nombreVisitante:
+        fd.visitante ||
+        fd.awayTeam ||
+        statsDoc?.partido?.visitante ||
+        statsDoc?.visitante ||
+        'Visitante',
+    },
+    scores: null,
+    apuestas: [],
+    guardado_en: statsDoc?.actualizado_en || null,
+  };
+}
+
+function obtenerFechaOrden(registro) {
+  if (registro.guardado_en?.toDate) {
+    return registro.guardado_en.toDate().getTime();
+  }
+
+  if (registro.stats_fotmob?.actualizado_en?.toDate) {
+    return registro.stats_fotmob.actualizado_en.toDate().getTime();
+  }
+
+  return 0;
 }
 
 function renderHistorial(predicciones) {
@@ -158,21 +233,32 @@ function renderHistorial(predicciones) {
     const gL = tieneResultado ? resultado.goles_local : '?';
     const gV = tieneResultado ? resultado.goles_visitante : '?';
 
+    const tienePrediccion = p.tiene_prediccion !== false;
+
     const scoreLocal = p.scores?.local?.total ?? null;
     const scoreVisitante = p.scores?.visitante?.total ?? null;
-    const ganadorModelo = calcularGanadorModelo(scoreLocal, scoreVisitante);
+    const ganadorModelo = tienePrediccion
+      ? calcularGanadorModelo(scoreLocal, scoreVisitante)
+      : null;
+
     const ganadorReal = resultado?.ganador || calcularGanadorReal(gL, gV);
     const aciertoGanador = tieneResultado && ganadorModelo
       ? ganadorModelo === ganadorReal
       : null;
 
-    const evaluacionHTML = tieneResultado
+    const evaluacionHTML = !tienePrediccion
       ? `
-        <div class="hist-eval ${aciertoGanador ? 'ok' : 'bad'}">
-          ${aciertoGanador ? '✓ Ganador acertado' : '✗ Ganador fallado'}
+        <div class="hist-eval pending">
+          Sin predicción previa
         </div>
       `
-      : `<div class="hist-eval pending">Pendiente</div>`;
+      : tieneResultado
+        ? `
+          <div class="hist-eval ${aciertoGanador ? 'ok' : 'bad'}">
+            ${aciertoGanador ? '✓ Ganador acertado' : '✗ Ganador fallado'}
+          </div>
+        `
+        : `<div class="hist-eval pending">Pendiente</div>`;
 
     const statsHTML = stats
       ? `
@@ -240,16 +326,18 @@ const apuestasHTML = apuestasValidas.length > 0
     </div>
   `;
 
-    const fuenteResultado = resultadoFotmob
-      ? `<span class="fuente-fotmob">Resultado y stats vía FotMob</span>`
-      : tieneResultado
-        ? `<span class="fuente-manual">Resultado manual</span>`
-        : `<span class="fuente-pendiente">Sin resultado</span>`;
+    const fuenteResultado = !tienePrediccion
+      ? `<span class="fuente-fotmob">Sin predicción previa · Solo stats FotMob</span>`
+      : resultadoFotmob
+        ? `<span class="fuente-fotmob">Resultado y stats vía FotMob</span>`
+        : tieneResultado
+          ? `<span class="fuente-manual">Resultado manual</span>`
+          : `<span class="fuente-pendiente">Sin resultado</span>`;
 
-    const btnResultado = !tieneResultado
+    const btnResultado = tienePrediccion && !tieneResultado
       ? `<button class="btn-ingresar-resultado" onclick="abrirModal('${p.id}', '${p.partido?.nombreLocal}', '${p.partido?.nombreVisitante}')">
-           Ingresar manual
-         </button>`
+          Ingresar manual
+        </button>`
       : '';
 
     return `
@@ -270,8 +358,10 @@ const apuestasHTML = apuestasValidas.length > 0
 
           <div>
             <div style="font-size:11px;color:var(--text2);margin-bottom:4px">
-              Score: ${scoreLocal !== null ? scoreLocal.toFixed(1) : '—'} vs ${scoreVisitante !== null ? scoreVisitante.toFixed(1) : '—'}
-            </div>
+              ${tienePrediccion
+                ? `Score: ${scoreLocal !== null ? scoreLocal.toFixed(1) : '—'} vs ${scoreVisitante !== null ? scoreVisitante.toFixed(1) : '—'}`
+                : 'Solo datos reales'
+              }            </div>
             ${evaluacionHTML}
             ${btnResultado}
           </div>
