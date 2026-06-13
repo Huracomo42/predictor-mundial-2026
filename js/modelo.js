@@ -364,19 +364,29 @@ function mercadoOver15Goles(ctx) {
 }
 
 function mercadoUnder35Goles(ctx) {
-  if (ctx.xgTotal > 3.2 && ctx.golesTotal > 3.2) return null;
+  const defensasSolidas =
+    ctx.concedidosLocal <= 1.1 &&
+    ctx.concedidosVisitante <= 1.1;
 
-  let prob = 0.60;
+  const xgModerado = ctx.xgTotal <= 2.7;
+  const golesModerados = ctx.golesTotal <= 2.8;
+  const partidoParejo = ctx.absDiffTotal <= 1.2;
 
-  if (ctx.xgTotal <= 2.6) prob += 0.06;
-  if (ctx.concedidosLocal <= 1.0 || ctx.concedidosVisitante <= 1.0) prob += 0.03;
+  // El Under 3.5 solo debe salir si hay señal clara de partido controlado.
+  if (!xgModerado && !defensasSolidas && !partidoParejo) return null;
+
+  let prob = 0.58;
+
+  if (xgModerado) prob += 0.06;
+  if (golesModerados) prob += 0.04;
+  if (defensasSolidas) prob += 0.05;
   if (ctx.estadisticaYPsicoContradictorias) prob += 0.03;
 
   return {
     mercado: 'Menos de 3.5 goles',
     confianza: prob,
     riesgo: 'bajo',
-    razon: `El perfil combinado no apunta a marcador desbordado. Se usa un under amplio como mercado conservador.`,
+    razon: `El perfil combinado apunta a partido controlado: xG total ${round2(ctx.xgTotal)}, goles promedio ${round2(ctx.golesTotal)} y defensas relativamente contenidas.`,
   };
 }
 
