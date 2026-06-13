@@ -25,38 +25,36 @@ export async function getPartidosMundial() {
 }
 
 export async function getStatsEquipo(equipoId, equipoNombre) {
+  let statsBase = null;
+
+  try {
+    statsBase = await getStatsEquipoFootballData(equipoId, equipoNombre);
+  } catch (e) {
+    console.warn(`No se pudo usar football-data para ${equipoNombre}. Usando default.`, e);
+    statsBase = getStatsDefault(equipoNombre);
+  }
+
   try {
     const statsFotmob = await getStatsEquipoFotmob(equipoNombre);
 
     if (statsFotmob && Number(statsFotmob.partidos_analizados || 0) > 0) {
-      return statsFotmob;
+      const pesoFotmob = calcularPesoFotmob(statsFotmob.partidos_analizados);
+      const statsCombinadas = mezclarStatsEquipo(statsBase, statsFotmob, pesoFotmob);
+
+      console.log(`Usando stats combinadas para ${equipoNombre}`, {
+        pesoFotmob,
+        base: statsBase?.fuente,
+        fotmob: statsFotmob?.fuente,
+        statsCombinadas,
+      });
+
+      return statsCombinadas;
     }
 
-    console.log(`FotMob sin historial para ${equipoNombre}. Usando football-data.`);
+    return statsBase;
   } catch (e) {
-    console.warn(`No se pudo usar FotMob para ${equipoNombre}. Usando football-data.`, e);
-  }
-
-  try {
-    if (!equipoId) return getStatsDefault(equipoNombre);
-
-    const url = new URL(
-      "https://us-central1-predictor-mundial-2026-cfbfe.cloudfunctions.net/getTeamStats"
-    );
-
-    url.searchParams.set("equipoId", equipoId);
-    url.searchParams.set("equipoNombre", equipoNombre || "Equipo");
-
-    const res = await fetch(url.toString());
-
-    if (!res.ok) {
-      throw new Error(`Firebase Function getTeamStats: ${res.status}`);
-    }
-
-    return await res.json();
-  } catch (e) {
-    console.error(`Error stats ${equipoNombre}:`, e);
-    return getStatsDefault(equipoNombre);
+    console.warn(`No se pudo usar FotMob para ${equipoNombre}. Usando base.`, e);
+    return statsBase;
   }
 }
 
@@ -76,6 +74,73 @@ async function getStatsEquipoFotmob(equipoNombre) {
   }
 
   return await res.json();
+}
+
+function calcularPesoFotmob(partidosAnalizados) {
+  const n = Number(partidosAnalizados || 0);
+
+  if (n <= 0) return 0;
+  if (n === 1) return 0.30;
+  if (n === 2) return 0.50;
+  if (n === 3) return 0.70;
+
+  return 0.85;
+}
+
+function mezclarStatsEquipo(base, fotmob, pesoFotmob) {
+  const pesoBase = 1 - pesoFotmob;
+
+  return {
+    xg_promedio: mix(base.xg_promedio, fotmob.xg_promedio, pesoBase, pesoFotmob),
+    xg_concedido_promedio: mix(base.xg_concedido_promedio, fotmob.xg_concedido_promedio, pesoBase, pesoFotmob),
+
+    forma: combinarForma(base.forma, fotmob.forma),
+    puntos_ultimos7: Math.round(mix(base.puntos_ultimos7, fotmob.puntos_ultimos7, pesoBase, pesoFotmob)),
+
+    goles_promedio: mix(base.goles_promedio, fotmob.goles_promedio, pesoBase, pesoFotmob),
+    goles_concedidos_promedio: mix(base.goles_concedidos_promedio, fotmob.goles_concedidos_promedio, pesoBase, pesoFotmob),
+
+    corners_promedio: mix(base.corners_promedio, fotmob.corners_promedio, pesoBase, pesoFotmob),
+    tiros_promedio: mix(base.tiros_promedio, fotmob.tiros_promedio, pesoBase, pesoFotmob),
+    tiros_puerta_promedio: mix(base.tiros_puerta_promedio, fotmob.tiros_puerta_promedio, pesoBase, pesoFotmob),
+
+    amarillas_promedio: mix(base.amarillas_promedio, fotmob.amarillas_promedio, pesoBase, pesoFotmob),
+
+    h2h_victorias: mix(base.h2h_victorias, fotmob.h2h_victorias, pesoBase, pesoFotmob),
+
+    lesiones_impacto: base.lesiones_impacto ?? fotmob.lesiones_impacto ?? 0,
+
+    partidos_analizados:
+      Number(base.partidos_analizados || 0) + Number(fotmob.partidos_analizados || 0),
+
+    fuente: `mixta_${Math.round(pesoFotmob * 100)}pct_fotmob`,
+    fuente_base: base.fuente || "base",
+    fuente_fotmob: fotmob.fuente || "fotmob",
+  };
+}
+
+function mix(baseVal, fotmobVal, pesoBase, pesoFotmob) {
+  const b = Number(baseVal);
+  const f = Number(fotmobVal);
+
+  if (Number.isNaN(b) && Number.isNaN(f)) return null;
+  if (Number.isNaN(b)) return redondear(f, 2);
+  if (Number.isNaN(f)) return redondear(b, 2);
+
+  return redondear((b * pesoBase) + (f * pesoFotmob), 2);
+}
+
+function combinarForma(baseForma, fotmobForma) {
+  const f = `${fotmobForma || ""}${baseForma || ""}`;
+  return f.slice(0, 5) || "WDWDW";
+}
+
+function redondear(valor, decimales = 2) {
+  const n = Number(valor);
+  if (Number.isNaN(n)) return null;
+
+  const factor = Math.pow(10, decimales);
+  return Math.round(n * factor) / factor;
 }
 
 function getStatsDefault(equipoNombre) {
