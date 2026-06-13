@@ -1,4 +1,9 @@
-import { getTodasPredicciones, guardarResultado, calcularMetricas } from './firebase-db.js';
+import {
+  getTodasPredicciones,
+  guardarResultado,
+  calcularMetricas,
+  getStatsAvanzadasBatch
+} from './firebase-db.js';
 
 let todasPredicciones = [];
 let partidoModalActual = null;
@@ -50,33 +55,106 @@ async function cargarMetricas() {
 
 async function cargarHistorial() {
   const container = document.getElementById('historial-container');
+
   try {
     todasPredicciones = await getTodasPredicciones();
+
+    const ids = todasPredicciones.map(p => p.id);
+    const statsPorPartido = await getStatsAvanzadasBatch(ids);
+
+    todasPredicciones = todasPredicciones.map(p => ({
+      ...p,
+      stats_fotmob: statsPorPartido[p.id] || null,
+    }));
+
     document.getElementById('historial-count').textContent =
       `${todasPredicciones.length} partido${todasPredicciones.length !== 1 ? 's' : ''} analizado${todasPredicciones.length !== 1 ? 's' : ''}`;
+
     renderHistorial(todasPredicciones);
   } catch (e) {
+    console.error('Error cargando historial:', e);
     container.innerHTML = `<div class="empty-state">Error cargando historial.</div>`;
   }
 }
 
 function renderHistorial(predicciones) {
   const container = document.getElementById('historial-container');
+
   if (predicciones.length === 0) {
     container.innerHTML = `<div class="empty-state">Aún no hay predicciones guardadas.<br>Analizá un partido para empezar.</div>`;
     return;
   }
 
   container.innerHTML = predicciones.map(p => {
-    const tieneResultado = !!p.resultado_real;
-    const gL = tieneResultado ? p.resultado_real.goles_local : '?';
-    const gV = tieneResultado ? p.resultado_real.goles_visitante : '?';
+    const statsDoc = p.stats_fotmob;
+    const stats = statsDoc?.stats_avanzadas || null;
+    const resultadoFotmob = statsDoc?.resultado_real || null;
+
+    const tieneResultado = !!(resultadoFotmob || p.resultado_real);
+    const resultado = resultadoFotmob || p.resultado_real || null;
+
+    const gL = tieneResultado ? resultado.goles_local : '?';
+    const gV = tieneResultado ? resultado.goles_visitante : '?';
+
+    const scoreLocal = p.scores?.local?.total ?? null;
+    const scoreVisitante = p.scores?.visitante?.total ?? null;
+    const ganadorModelo = calcularGanadorModelo(scoreLocal, scoreVisitante);
+    const ganadorReal = resultado?.ganador || calcularGanadorReal(gL, gV);
+    const aciertoGanador = tieneResultado && ganadorModelo
+      ? ganadorModelo === ganadorReal
+      : null;
+
+    const evaluacionHTML = tieneResultado
+      ? `
+        <div class="hist-eval ${aciertoGanador ? 'ok' : 'bad'}">
+          ${aciertoGanador ? '✓ Ganador acertado' : '✗ Ganador fallado'}
+        </div>
+      `
+      : `<div class="hist-eval pending">Pendiente</div>`;
+
+    const statsHTML = stats
+      ? `
+        <div class="stats-grid-mini">
+          <div><span>xG</span><strong>${fmt(stats.xg_local)} - ${fmt(stats.xg_visitante)}</strong></div>
+          <div><span>Tiros</span><strong>${fmt(stats.tiros_local)} - ${fmt(stats.tiros_visitante)}</strong></div>
+          <div><span>Al arco</span><strong>${fmt(stats.tiros_puerta_local)} - ${fmt(stats.tiros_puerta_visitante)}</strong></div>
+          <div><span>Corners</span><strong>${fmt(stats.corners_local)} - ${fmt(stats.corners_visitante)}</strong></div>
+          <div><span>Amarillas</span><strong>${fmt(stats.amarillas_local)} - ${fmt(stats.amarillas_visitante)}</strong></div>
+          <div><span>Rojas</span><strong>${fmt(stats.rojas_local)} - ${fmt(stats.rojas_visitante)}</strong></div>
+          <div><span>Posesión</span><strong>${fmt(stats.posesion_local)}% - ${fmt(stats.posesion_visitante)}%</strong></div>
+          <div><span>Big chances</span><strong>${fmt(stats.grandes_ocaciones_local)} - ${fmt(stats.grandes_ocaciones_visitante)}</strong></div>
+        </div>
+      `
+      : `
+        <div class="stats-missing">
+          Sin stats avanzadas FotMob todavía.
+        </div>
+      `;
+
+    const contextoHTML = statsDoc?.contexto_partido
+      ? `
+        <div class="hist-contexto">
+          ${statsDoc.contexto_partido.estadio || 'Estadio —'} · 
+          Árbitro: ${statsDoc.contexto_partido.arbitro || '—'} · 
+          Asistencia: ${statsDoc.contexto_partido.asistencia || '—'}
+        </div>
+      `
+      : '';
 
     const apuestasHTML = (p.apuestas || []).map(ap => {
       let resultClass = 'hist-pending';
       let resultText = '⏳ Pendiente';
-      if (ap.entro === true) { resultClass = 'hist-hit'; resultText = '✓ Entró'; }
-      if (ap.entro === false) { resultClass = 'hist-miss'; resultText = '✗ Falló'; }
+
+      if (ap.entro === true) {
+        resultClass = 'hist-hit';
+        resultText = '✓ Entró';
+      }
+
+      if (ap.entro === false) {
+        resultClass = 'hist-miss';
+        resultText = '✗ Falló';
+      }
+
       return `
         <div class="hist-apuesta">
           <span class="hist-label">${ap.tipo.toUpperCase()} · ${ap.mercado} (~${ap.cuota_estimada})</span>
@@ -85,11 +163,17 @@ function renderHistorial(predicciones) {
       `;
     }).join('');
 
+    const fuenteResultado = resultadoFotmob
+      ? `<span class="fuente-fotmob">Resultado y stats vía FotMob</span>`
+      : tieneResultado
+        ? `<span class="fuente-manual">Resultado manual</span>`
+        : `<span class="fuente-pendiente">Sin resultado</span>`;
+
     const btnResultado = !tieneResultado
       ? `<button class="btn-ingresar-resultado" onclick="abrirModal('${p.id}', '${p.partido?.nombreLocal}', '${p.partido?.nombreVisitante}')">
-           Ingresar resultado
+           Ingresar manual
          </button>`
-      : `<span style="font-size:11px;color:var(--text3)">Resultado ingresado</span>`;
+      : '';
 
     return `
       <div class="historial-item">
@@ -102,19 +186,60 @@ function renderHistorial(predicciones) {
               ${p.guardado_en?.toDate ? p.guardado_en.toDate().toLocaleDateString('es-PE') : '—'} · 
               Modelo v${p.scores?.version_modelo || '1.0'}
             </div>
+            <div class="historial-fecha">${fuenteResultado}</div>
           </div>
+
           <div class="historial-resultado">${gL} — ${gV}</div>
+
           <div>
             <div style="font-size:11px;color:var(--text2);margin-bottom:4px">
-              Score: ${p.scores?.local?.total?.toFixed(1) || '—'} vs ${p.scores?.visitante?.total?.toFixed(1) || '—'}
+              Score: ${scoreLocal !== null ? scoreLocal.toFixed(1) : '—'} vs ${scoreVisitante !== null ? scoreVisitante.toFixed(1) : '—'}
             </div>
+            ${evaluacionHTML}
             ${btnResultado}
           </div>
         </div>
+
+        ${contextoHTML}
+
+        <div class="historial-advanced">
+          ${statsHTML}
+        </div>
+
         <div class="historial-apuestas">${apuestasHTML}</div>
       </div>
     `;
   }).join('');
+}
+
+function calcularGanadorModelo(scoreLocal, scoreVisitante) {
+  if (scoreLocal === null || scoreLocal === undefined) return null;
+  if (scoreVisitante === null || scoreVisitante === undefined) return null;
+
+  if (scoreLocal > scoreVisitante) return 'local';
+  if (scoreVisitante > scoreLocal) return 'visitante';
+  return 'empate';
+}
+
+function calcularGanadorReal(golesLocal, golesVisitante) {
+  if (golesLocal === '?' || golesVisitante === '?') return null;
+
+  const gl = Number(golesLocal);
+  const gv = Number(golesVisitante);
+
+  if (gl > gv) return 'local';
+  if (gv > gl) return 'visitante';
+  return 'empate';
+}
+
+function fmt(valor) {
+  if (valor === null || valor === undefined || Number.isNaN(valor)) return '—';
+
+  if (typeof valor === 'number') {
+    return Number.isInteger(valor) ? valor : valor.toFixed(2);
+  }
+
+  return valor;
 }
 
 window.filtrarHistorial = function() {

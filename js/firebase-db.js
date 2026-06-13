@@ -202,3 +202,22 @@ export async function calcularMetricas() {
 
   return metricas;
 }
+export async function getStatsAvanzadas(partidoId) {
+  try {
+    const snap = await getDoc(doc(db, 'stats_avanzadas', partidoId));
+    return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+  } catch (e) {
+    console.error('Error leyendo stats avanzadas:', e);
+    return null;
+  }
+}
+
+export async function getStatsAvanzadasBatch(partidoIds) {
+  const out = {};
+
+  for (const partidoId of partidoIds) {
+    out[partidoId] = await getStatsAvanzadas(partidoId);
+  }
+
+  return out;
+}
