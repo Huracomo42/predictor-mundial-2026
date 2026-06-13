@@ -124,13 +124,17 @@ function calcularScorePsicologico(psico, partido, rol, pesos) {
 }
 
 function calcularBoost(rankingFIFA, jornada) {
-  const expectativa = Math.min(1, (rankingFIFA || 24) / 48);
-  const factorBase = expectativa;
+  const ranking = Number(rankingFIFA || 24);
 
-  if (jornada === 1) return 1.0 + (0.10 * factorBase);
-  if (jornada === 2) return 1.0 + (0.05 * factorBase);
-  if (jornada === 3) return 1.0;
-  return 1.0 + (0.03 * factorBase);
+  // En FIFA, menor ranking = equipo más fuerte.
+  // Aquí calculamos efecto underdog: equipos con ranking más alto reciben más boost emocional.
+  const factorUnderdog = Math.min(1, Math.max(0, (ranking - 1) / 47));
+
+  if (jornada === 1) return 1.0 + (0.05 * factorUnderdog);
+  if (jornada === 2) return 1.0 + (0.03 * factorUnderdog);
+  if (jornada === 3) return 1.0 + (0.015 * factorUnderdog);
+
+  return 1.0 + (0.02 * factorUnderdog);
 }
 
 function generarApuestas({
