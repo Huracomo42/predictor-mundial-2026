@@ -26,6 +26,18 @@ export async function getPartidosMundial() {
 
 export async function getStatsEquipo(equipoId, equipoNombre) {
   try {
+    const statsFotmob = await getStatsEquipoFotmob(equipoNombre);
+
+    if (statsFotmob && Number(statsFotmob.partidos_analizados || 0) > 0) {
+      return statsFotmob;
+    }
+
+    console.log(`FotMob sin historial para ${equipoNombre}. Usando football-data.`);
+  } catch (e) {
+    console.warn(`No se pudo usar FotMob para ${equipoNombre}. Usando football-data.`, e);
+  }
+
+  try {
     if (!equipoId) return getStatsDefault(equipoNombre);
 
     const url = new URL(
@@ -46,6 +58,24 @@ export async function getStatsEquipo(equipoId, equipoNombre) {
     console.error(`Error stats ${equipoNombre}:`, e);
     return getStatsDefault(equipoNombre);
   }
+}
+
+async function getStatsEquipoFotmob(equipoNombre) {
+  if (!equipoNombre) return null;
+
+  const url = new URL(
+    "https://us-central1-predictor-mundial-2026-cfbfe.cloudfunctions.net/getTeamStatsFotmob"
+  );
+
+  url.searchParams.set("equipoNombre", equipoNombre);
+
+  const res = await fetch(url.toString());
+
+  if (!res.ok) {
+    throw new Error(`Firebase Function getTeamStatsFotmob: ${res.status}`);
+  }
+
+  return await res.json();
 }
 
 function getStatsDefault(equipoNombre) {
