@@ -146,23 +146,259 @@ function generarApuestas({
   statsVisitante,
   partido,
   psico,
-}) {  
-  const diff = totalLocal - totalVisitante;
-  const absDiff = Math.abs(diff);
+}) {
+  const diffTotal = totalLocal - totalVisitante;
+  const absDiffTotal = Math.abs(diffTotal);
 
-  const xgTotal = (statsLocal?.xg_promedio || 1.2) + (statsVisitante?.xg_promedio || 1.2);
-  const cornersTotal = (statsLocal?.corners_promedio || 4.5) + (statsVisitante?.corners_promedio || 4.5);
+  const diffStat = scoreStatLocal - scoreStatVisitante;
+  const diffPsico = scorePsicoLocal - scorePsicoVisitante;
+  const diffBoost = boostLocal - boostVisitante;
 
-  const favorito = diff >= 0 ? partido.nombreLocal : partido.nombreVisitante;
-  const favoritoRol = diff >= 0 ? 'local' : 'visitante';
+  const xgTotal =
+    Number(statsLocal?.xg_promedio || 1.2) +
+    Number(statsVisitante?.xg_promedio || 1.2);
 
-  const underdog = diff >= 0 ? partido.nombreVisitante : partido.nombreLocal;
+  const cornersTotal =
+    Number(statsLocal?.corners_promedio || 4.5) +
+    Number(statsVisitante?.corners_promedio || 4.5);
 
-  const segura = generarApuestaSegura(xgTotal, cornersTotal, partido);
-  const media = generarApuestaMedia(diff, absDiff, favorito, favoritoRol, partido);
-  const malcriada = generarApuestaMalcriada(diff, absDiff, xgTotal, favorito, underdog, partido, psico);
+  const favorito = diffTotal >= 0 ? partido.nombreLocal : partido.nombreVisitante;
+  const underdog = diffTotal >= 0 ? partido.nombreVisitante : partido.nombreLocal;
+  const favoritoRol = diffTotal >= 0 ? 'local' : 'visitante';
+  const underdogRol = diffTotal >= 0 ? 'visitante' : 'local';
+
+  const psicoFavorito = favoritoRol === 'local' ? psico?.local : psico?.visitante;
+  const psicoUnderdog = underdogRol === 'local' ? psico?.local : psico?.visitante;
+
+  const estadisticaYPsicoAlineadas =
+    (diffStat >= 0 && diffPsico >= 0) ||
+    (diffStat < 0 && diffPsico < 0);
+
+  const estadisticaYPsicoContradictorias =
+    Math.abs(diffStat) >= 0.5 &&
+    Math.abs(diffPsico) >= 0.5 &&
+    !estadisticaYPsicoAlineadas;
+
+  const favoritoConPresion =
+    Boolean(psicoFavorito?.necesita_ganar) ||
+    Number(psicoFavorito?.presion_mediatica || 0) >= 7 ||
+    Number(psicoFavorito?.conflicto_interno || 0) >= 5 ||
+    psicoFavorito?.lider_disponible === false;
+
+  const underdogConMomentum =
+    Boolean(psicoUnderdog?.underdog) ||
+    Boolean(psicoUnderdog?.generacion_peak) ||
+    psicoUnderdog?.clasifico_sufriendo === 'ultimo';
+
+  const boostFavoreceFavorito =
+    favoritoRol === 'local' ? diffBoost > 0 : diffBoost < 0;
+
+  const contexto = {
+    diffTotal,
+    absDiffTotal,
+    diffStat,
+    diffPsico,
+    diffBoost,
+    xgTotal,
+    cornersTotal,
+    favorito,
+    underdog,
+    favoritoRol,
+    underdogRol,
+    estadisticaYPsicoAlineadas,
+    estadisticaYPsicoContradictorias,
+    favoritoConPresion,
+    underdogConMomentum,
+    boostFavoreceFavorito,
+  };
+
+  console.log('Contexto apuestas', contexto);
+
+  const segura = generarApuestaSeguraAjustada(contexto);
+  const media = generarApuestaMediaAjustada(contexto);
+  const malcriada = generarApuestaMalcriadaAjustada(contexto);
 
   return [segura, media, malcriada];
+}
+
+function generarApuestaSeguraAjustada(ctx) {
+  if (
+    ctx.absDiffTotal >= 1.0 &&
+    ctx.estadisticaYPsicoAlineadas &&
+    !ctx.favoritoConPresion
+  ) {
+    const ap = generarApuestaMedia(
+      ctx.diffTotal,
+      ctx.absDiffTotal,
+      ctx.favorito,
+      ctx.favoritoRol
+    );
+
+    return {
+      ...ap,
+      tipo: 'segura',
+      confianza: round2(Math.min(0.74, ap.confianza + 0.08)),
+      razon: `${ap.razon} Estadística y psicología apuntan al mismo lado, por eso se eleva como opción segura.`,
+    };
+  }
+
+  if (ctx.estadisticaYPsicoContradictorias || ctx.favoritoConPresion) {
+    const mercado = ctx.xgTotal <= 2.7 ? 'Menos de 3.5 goles' : 'Más de 1.5 goles';
+    const prob = ctx.xgTotal <= 2.7 ? 0.68 : 0.66;
+    const cuota = calcularCuota(prob);
+    const evCalc = calcularEV(prob, cuota);
+
+    return {
+      tipo: 'segura',
+      mercado,
+      confianza: round2(prob),
+      cuota_estimada: cuota,
+      EV: round3(evCalc),
+      recomendada: prob >= 0.65 && evCalc >= -0.05,
+      razon: `Hay señales cruzadas entre estadística y psicología o presión sobre el favorito. Se evita ganador directo y se propone un mercado más amplio.`,
+    };
+  }
+
+  const ap = generarApuestaSegura(ctx.xgTotal, ctx.cornersTotal);
+
+  if (ctx.boostFavoreceFavorito && ctx.absDiffTotal >= 0.6) {
+    return {
+      ...ap,
+      confianza: round2(Math.min(0.78, ap.confianza + 0.03)),
+      razon: `${ap.razon} El boost mundialista favorece al equipo con ventaja, reforzando ligeramente la confianza.`,
+    };
+  }
+
+  return ap;
+}
+
+function generarApuestaMediaAjustada(ctx) {
+  if (
+    ctx.absDiffTotal >= 1.2 &&
+    ctx.estadisticaYPsicoAlineadas &&
+    !ctx.favoritoConPresion
+  ) {
+    const mercado =
+      ctx.favoritoRol === 'local'
+        ? `${ctx.favorito} gana`
+        : `${ctx.favorito} gana`;
+
+    const prob = Math.min(0.58, 0.50 + ctx.absDiffTotal * 0.04);
+    const cuota = calcularCuota(prob);
+    const evCalc = calcularEV(prob, cuota);
+
+    return {
+      tipo: 'media',
+      mercado,
+      confianza: round2(prob),
+      cuota_estimada: cuota,
+      EV: round3(evCalc),
+      recomendada: prob >= 0.53 && evCalc >= -0.05,
+      razon: `La ventaja total es clara y está respaldada por estadística y psicología. Se permite una lectura más agresiva que doble oportunidad.`,
+    };
+  }
+
+  if (ctx.underdogConMomentum && ctx.absDiffTotal <= 1.2) {
+    const mercado =
+      ctx.underdogRol === 'local'
+        ? `${ctx.underdog} gana o empata (1X)`
+        : `${ctx.underdog} gana o empata (X2)`;
+
+    const prob = 0.53;
+    const cuota = calcularCuota(prob);
+    const evCalc = calcularEV(prob, cuota);
+
+    return {
+      tipo: 'media',
+      mercado,
+      confianza: round2(prob),
+      cuota_estimada: cuota,
+      EV: round3(evCalc),
+      recomendada: prob >= 0.52 && evCalc >= -0.05,
+      razon: `El underdog muestra momentum psicológico y la diferencia total no es amplia. Se abre una lectura de doble oportunidad para el no favorito.`,
+    };
+  }
+
+  if (ctx.estadisticaYPsicoContradictorias) {
+    const mercado = 'Empate o partido cerrado';
+    const prob = 0.54;
+    const cuota = calcularCuota(prob);
+    const evCalc = calcularEV(prob, cuota);
+
+    return {
+      tipo: 'media',
+      mercado,
+      confianza: round2(prob),
+      cuota_estimada: cuota,
+      EV: round3(evCalc),
+      recomendada: prob >= 0.52 && evCalc >= -0.05,
+      razon: `La estadística y la psicología no apuntan al mismo lado. El modelo espera un partido más disputado que dominante.`,
+    };
+  }
+
+  return generarApuestaMedia(
+    ctx.diffTotal,
+    ctx.absDiffTotal,
+    ctx.favorito,
+    ctx.favoritoRol
+  );
+}
+
+function generarApuestaMalcriadaAjustada(ctx) {
+  if (ctx.underdogConMomentum && ctx.absDiffTotal <= 1.5) {
+    const prob = 0.24;
+    const cuota = 5.5;
+    const evCalc = calcularEV(prob, cuota);
+
+    return {
+      tipo: 'malcriada',
+      mercado: `${ctx.underdog} anota o evita goleada`,
+      confianza: round2(prob),
+      cuota_estimada: cuota,
+      EV: round3(evCalc),
+      recomendada: evCalc >= 0.20,
+      razon: `La psicología detecta narrativa positiva del underdog. Es una apuesta agresiva, pero conectada al componente emocional del modelo.`,
+    };
+  }
+
+  if (
+    ctx.absDiffTotal >= 1.5 &&
+    ctx.estadisticaYPsicoAlineadas &&
+    ctx.xgTotal <= 2.4 &&
+    !ctx.favoritoConPresion
+  ) {
+    const mercado =
+      ctx.favoritoRol === 'local'
+        ? `${ctx.favorito} gana 1-0 (marcador exacto)`
+        : `${ctx.favorito} gana 0-1 (marcador exacto)`;
+
+    const prob = 0.17;
+    const cuota = 12.0;
+    const evCalc = calcularEV(prob, cuota);
+
+    return {
+      tipo: 'malcriada',
+      mercado,
+      confianza: round2(prob),
+      cuota_estimada: cuota,
+      EV: round3(evCalc),
+      recomendada: evCalc >= 0.20,
+      razon: `Favorito claro, señales alineadas y xG bajo. La lectura agresiva es una victoria corta del favorito.`,
+    };
+  }
+
+  return generarApuestaMalcriada(
+    ctx.diffTotal,
+    ctx.absDiffTotal,
+    ctx.xgTotal,
+    ctx.favorito,
+    ctx.underdog,
+    null,
+    {
+      local: ctx.underdogRol === 'local' && ctx.underdogConMomentum ? { underdog: true } : {},
+      visitante: ctx.underdogRol === 'visitante' && ctx.underdogConMomentum ? { underdog: true } : {},
+    }
+  );
 }
 
 function generarApuestaSegura(xgTotal, cornersTotal, partido) {
