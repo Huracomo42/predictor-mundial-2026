@@ -158,7 +158,11 @@ async function correrAnalisis(partido, generarIA = false) {
       analisis_ia_cache: analisisIA.cache || false,
       version_modelo: '1.0',
       scores: resultado,
-      apuestas: resultado.apuestas,
+      apuestas: resultado.apuestas || [],
+      sin_apuesta_recomendada: !resultado.apuestas || resultado.apuestas.length === 0,
+      motivo_sin_apuesta: !resultado.apuestas || resultado.apuestas.length === 0
+        ? 'No se encontraron mercados con EV positivo bajo los umbrales actuales.'
+        : null,
     };
 
     document.getElementById('loading-analisis').style.display = 'none';

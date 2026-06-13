@@ -330,7 +330,12 @@ const apuestasHTML = apuestasValidas.length > 0
     }).join('')
   : `
     <div class="hist-apuesta">
-      <span class="hist-label">Sin apuestas registradas para esta predicción</span>
+      <span class="hist-label">
+        ${p.sin_apuesta_recomendada
+          ? (p.motivo_sin_apuesta || 'Modelo decidió no recomendar apuestas para este partido')
+          : 'Sin apuestas registradas para esta predicción'
+        }
+      </span>
       <span class="hist-pending">—</span>
     </div>
   `;
