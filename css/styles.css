@@ -853,3 +853,35 @@ body {
 .fuente-pendiente {
   color: var(--text3);
 }
+.filter-date {
+  background: var(--bg2);
+  color: var(--text);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-family: var(--font);
+  font-size: 13px;
+}
+
+.sync-fotmob-status {
+  font-size: 11px;
+  color: var(--text3);
+  min-width: 180px;
+}
+
+.sync-fotmob-status.ok {
+  color: var(--green);
+}
+
+.sync-fotmob-status.error {
+  color: var(--red);
+}
+
+.sync-fotmob-status.loading {
+  color: var(--amber);
+}
+
+#btn-sync-fotmob:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

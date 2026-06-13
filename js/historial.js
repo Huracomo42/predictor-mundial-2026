@@ -8,9 +8,71 @@ import {
 let todasPredicciones = [];
 let partidoModalActual = null;
 
+const SYNC_ADVANCED_STATS_URL =
+  'https://us-central1-predictor-mundial-2026-cfbfe.cloudfunctions.net/syncAdvancedStats';
+
+
 async function init() {
+  configurarSyncFotmob();
   await cargarMetricas();
   await cargarHistorial();
+}
+
+function configurarSyncFotmob() {
+  const btn = document.getElementById('btn-sync-fotmob');
+  const inputFecha = document.getElementById('fecha-sync-fotmob');
+  const status = document.getElementById('sync-fotmob-status');
+
+  if (!btn || !inputFecha || !status) return;
+
+  inputFecha.value = new Date().toISOString().slice(0, 10);
+
+  btn.addEventListener('click', async () => {
+    const fecha = inputFecha.value;
+
+    if (!fecha) {
+      status.textContent = 'Selecciona una fecha.';
+      status.className = 'sync-fotmob-status error';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Actualizando...';
+    status.textContent = 'Sincronizando FotMob...';
+    status.className = 'sync-fotmob-status loading';
+
+    try {
+      const res = await fetch(`${SYNC_ADVANCED_STATS_URL}?date=${fecha}`);
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        throw new Error(data.error || 'syncAdvancedStats respondió sin ok=true');
+      }
+
+      const guardados = Array.isArray(data.resultados)
+        ? data.resultados.filter(r => r.estado === 'guardado').length
+        : 0;
+
+      status.textContent = `FotMob actualizado: ${guardados} partido(s) guardado(s).`;
+      status.className = 'sync-fotmob-status ok';
+
+      await cargarHistorial();
+      await cargarMetricas();
+
+    } catch (e) {
+      console.error('Error sincronizando FotMob:', e);
+      status.textContent = 'Error sincronizando FotMob. Revisa consola.';
+      status.className = 'sync-fotmob-status error';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Actualizar stats FotMob';
+    }
+  });
 }
 
 async function cargarMetricas() {
@@ -141,7 +203,12 @@ function renderHistorial(predicciones) {
       `
       : '';
 
-    const apuestasHTML = (p.apuestas || []).map(ap => {
+    const apuestasValidas = Array.isArray(p.apuestas)
+  ? p.apuestas.filter(ap => ap && typeof ap === 'object')
+  : [];
+
+const apuestasHTML = apuestasValidas.length > 0
+  ? apuestasValidas.map(ap => {
       let resultClass = 'hist-pending';
       let resultText = '⏳ Pendiente';
 
@@ -155,13 +222,23 @@ function renderHistorial(predicciones) {
         resultText = '✗ Falló';
       }
 
+      const tipo = ap.tipo ? String(ap.tipo).toUpperCase() : 'SIN TIPO';
+      const mercado = ap.mercado || 'Mercado no definido';
+      const cuota = ap.cuota_estimada || '—';
+
       return `
         <div class="hist-apuesta">
-          <span class="hist-label">${ap.tipo.toUpperCase()} · ${ap.mercado} (~${ap.cuota_estimada})</span>
+          <span class="hist-label">${tipo} · ${mercado} (~${cuota})</span>
           <span class="${resultClass}">${resultText}</span>
         </div>
       `;
-    }).join('');
+    }).join('')
+  : `
+    <div class="hist-apuesta">
+      <span class="hist-label">Sin apuestas registradas para esta predicción</span>
+      <span class="hist-pending">—</span>
+    </div>
+  `;
 
     const fuenteResultado = resultadoFotmob
       ? `<span class="fuente-fotmob">Resultado y stats vía FotMob</span>`

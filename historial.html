@@ -41,18 +41,27 @@
       <p class="page-sub">Predicciones guardadas vs resultados reales</p>
     </div>
     <div class="filter-bar">
+      <input type="date" id="fecha-sync-fotmob" class="filter-date">
+
+      <button id="btn-sync-fotmob" class="btn-secondary" type="button">
+        Actualizar stats FotMob
+      </button>
+
       <select id="filter-tipo" onchange="filtrarHistorial()">
         <option value="todos">Todos los tipos</option>
         <option value="segura">Seguras</option>
         <option value="media">Medias</option>
         <option value="malcriada">Malcriadas</option>
       </select>
+
       <select id="filter-resultado" onchange="filtrarHistorial()">
         <option value="todos">Todos</option>
         <option value="acierto">Aciertos</option>
         <option value="fallo">Fallos</option>
         <option value="pendiente">Pendientes</option>
       </select>
+
+      <span id="sync-fotmob-status" class="sync-fotmob-status"></span>
     </div>
   </div>
 
