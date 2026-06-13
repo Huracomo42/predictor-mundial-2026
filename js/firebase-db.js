@@ -224,6 +224,82 @@ export async function calcularMetricas() {
   return metricas;
 }
 
+export async function actualizarEvaluacionApuestasConFotmob() {
+  try {
+    const predicciones = await getTodasPredicciones();
+    const ids = predicciones.map(p => p.id);
+    const statsPorPartido = await getStatsAvanzadasBatch(ids);
+
+    let actualizadas = 0;
+
+    for (const p of predicciones) {
+      const statsDoc = statsPorPartido[p.id];
+
+      if (!statsDoc?.resultado_real || !statsDoc?.stats_avanzadas) continue;
+
+      const apuestas = Array.isArray(p.apuestas)
+        ? p.apuestas.filter(ap => ap && typeof ap === 'object')
+        : [];
+
+      if (apuestas.length === 0) continue;
+
+      const resultado = construirResultadoDesdeFotmob(statsDoc);
+      const apuestasEvaluadas = evaluarApuestas(apuestas, resultado);
+
+      await updateDoc(doc(db, 'predicciones', p.id), {
+        apuestas: apuestasEvaluadas,
+        evaluado_con_fotmob_en: serverTimestamp(),
+      });
+
+      actualizadas++;
+    }
+
+    return {
+      ok: true,
+      actualizadas,
+    };
+
+  } catch (e) {
+    console.error('Error evaluando apuestas con FotMob:', e);
+    return {
+      ok: false,
+      actualizadas: 0,
+      error: e.message,
+    };
+  }
+}
+
+function construirResultadoDesdeFotmob(statsDoc) {
+  const r = statsDoc.resultado_real || {};
+  const s = statsDoc.stats_avanzadas || {};
+
+  return {
+    goles_local: Number(r.goles_local ?? 0),
+    goles_visitante: Number(r.goles_visitante ?? 0),
+
+    corners_totales:
+      Number(s.corners_local ?? 0) + Number(s.corners_visitante ?? 0),
+
+    corners_local: Number(s.corners_local ?? 0),
+    corners_visitante: Number(s.corners_visitante ?? 0),
+
+    amarillas_local: Number(s.amarillas_local ?? 0),
+    amarillas_visitante: Number(s.amarillas_visitante ?? 0),
+
+    rojas_local: Number(s.rojas_local ?? 0),
+    rojas_visitante: Number(s.rojas_visitante ?? 0),
+
+    xg_local: Number(s.xg_local ?? 0),
+    xg_visitante: Number(s.xg_visitante ?? 0),
+
+    tiros_local: Number(s.tiros_local ?? 0),
+    tiros_visitante: Number(s.tiros_visitante ?? 0),
+
+    tiros_puerta_local: Number(s.tiros_puerta_local ?? 0),
+    tiros_puerta_visitante: Number(s.tiros_puerta_visitante ?? 0),
+  };
+}
+
 function obtenerResultadoRealParaMetricas(prediccion, statsAvanzadas) {
   if (statsAvanzadas?.resultado_real) {
     return {

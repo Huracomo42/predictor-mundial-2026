@@ -2,7 +2,8 @@ import {
   getTodasPredicciones,
   guardarResultado,
   calcularMetricas,
-  getTodasStatsAvanzadas
+  getTodasStatsAvanzadas,
+  actualizarEvaluacionApuestasConFotmob
 } from './firebase-db.js';
 
 let todasPredicciones = [];
@@ -60,6 +61,14 @@ function configurarSyncFotmob() {
 
       status.textContent = `FotMob actualizado: ${guardados} partido(s) guardado(s).`;
       status.className = 'sync-fotmob-status ok';
+
+      const evaluacion = await actualizarEvaluacionApuestasConFotmob();
+
+      if (evaluacion.ok) {
+        status.textContent = `FotMob actualizado: ${guardados} partido(s). Apuestas evaluadas: ${evaluacion.actualizadas}.`;
+      } else {
+        status.textContent = `FotMob actualizado, pero hubo error evaluando apuestas.`;
+      }
 
       await cargarHistorial();
       await cargarMetricas();
