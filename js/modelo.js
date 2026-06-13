@@ -16,8 +16,21 @@ export async function calcularPrediccion(datosPartido, statsLocal, statsVisitant
   const totalLocal = ((scoreStatLocal * pesos.estadistico) + (scorePsicoLocal * pesos.psicologico)) * boostLocal;
   const totalVisitante = ((scoreStatVisitante * pesos.estadistico) + (scorePsicoVisitante * pesos.psicologico)) * boostVisitante;
 
-  const apuestas = generarApuestas(totalLocal, totalVisitante, statsLocal, statsVisitante, datosPartido, psicologico);
-
+  const apuestas = generarApuestas({
+    totalLocal,
+    totalVisitante,
+    scoreStatLocal,
+    scoreStatVisitante,
+    scorePsicoLocal,
+    scorePsicoVisitante,
+    boostLocal,
+    boostVisitante,
+    statsLocal,
+    statsVisitante,
+    partido: datosPartido,
+    psico: psicologico,
+  });
+  
   return {
     local: {
       scoreStat: round2(scoreStatLocal),
@@ -120,7 +133,20 @@ function calcularBoost(rankingFIFA, jornada) {
   return 1.0 + (0.03 * factorBase);
 }
 
-function generarApuestas(totalLocal, totalVisitante, statsLocal, statsVisitante, partido, psico) {
+function generarApuestas({
+  totalLocal,
+  totalVisitante,
+  scoreStatLocal,
+  scoreStatVisitante,
+  scorePsicoLocal,
+  scorePsicoVisitante,
+  boostLocal,
+  boostVisitante,
+  statsLocal,
+  statsVisitante,
+  partido,
+  psico,
+}) {  
   const diff = totalLocal - totalVisitante;
   const absDiff = Math.abs(diff);
 
